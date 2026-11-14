@@ -28,6 +28,7 @@ jobs:
 
       - name: Konfigurera Android SDK
         run: |
+          mkdir -p "$HOME/.android/cache"
           SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           mkdir -p "$SDK_DIR" 2>/dev/null || sudo mkdir -p "$SDK_DIR"
           if [ ! -w "$SDK_DIR" ] && command -v sudo >/dev/null 2>&1; then
@@ -59,26 +60,51 @@ jobs:
 
           set +o pipefail
           yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" --licenses >/dev/null 2>&1 || true
-          yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-36.1" "platforms;android-36" "build-tools;36.0.0"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-36.1" "build-tools;36.0.0" 2>&1 | tee /tmp/sdkmanager.log
+          SDK_RC=${PIPESTATUS[1]}
           set -o pipefail
+          if [ "$SDK_RC" -ne 0 ]; then
+            tail -n 20 /tmp/sdkmanager.log | while IFS= read -r line; do
+              echo "::error::sdkmanager: $line"
+            done
+            exit "$SDK_RC"
+          fi
 
       - name: Återställ debug-keystore för signering
         run: |
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
+          if [ ! -f debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              tr -d '\r\n' < debug.keystore.base64 | base64 -d > debug.keystore
+            else
+              keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
           fi
 
       - name: Konfigurera Gradle 9.3.1
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "9.3.1"
 
       - name: Bygg signerad APK
         env:
           JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
-        run: >
-          gradle assembleDebug --no-daemon --stacktrace --max-workers=2
-          -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
+        run: |
+          set +e
+          gradle assembleDebug --no-daemon --no-configuration-cache --stacktrace --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8" \
+            2>&1 | tee /tmp/gradle-build.log
+          BUILD_RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$BUILD_RC" -ne 0 ]; then
+            MATCHES=$(grep -E "^(FAILURE:|\\* What went wrong:|> |e: |Caused by:|Execution failed)" /tmp/gradle-build.log | head -n 30 || true)
+            if [ -z "$MATCHES" ]; then
+              MATCHES=$(tail -n 25 /tmp/gradle-build.log)
+            fi
+            printf '%s\n' "$MATCHES" | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit "$BUILD_RC"
+          fi
 
       - name: Förbered APK-fil för nedladdning
         run: |
@@ -107,8 +133,9 @@ jobs:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
-          gradle assembleRelease --no-daemon --stacktrace --max-workers=2 -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > "$KEYSTORE_PATH"
+          gradle assembleRelease --no-daemon --no-configuration-cache --stacktrace --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
           cp app/build/outputs/apk/release/app-release.apk release-apks/NaringAI-release.apk
 
       - name: Ladda upp APK som Workflow Artifact
