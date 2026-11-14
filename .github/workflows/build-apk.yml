@@ -1,0 +1,105 @@
+name: Bygg och publicera Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Bygg NäringAI APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Hämta källkod
+        uses: actions/checkout@v4
+
+      - name: Konfigurera JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Konfigurera Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Återställ debug-keystore för signering
+        run: |
+          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+
+      - name: Konfigurera Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Bygg signerad APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Förbered APK-fil för nedladdning
+        run: |
+          mkdir -p release-apks
+          cp app/build/outputs/apk/debug/app-debug.apk release-apks/NaringAI.apk
+
+      - name: Kontrollera om release-keystore finns
+        id: check_release
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PW: ${{ secrets.STORE_PASSWORD }}
+          KEY_PW: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PW" ] && [ -n "$KEY_PW" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bygg Release APK (om keystore-hemligheter finns)
+        if: steps.check_release.outputs.enabled == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk release-apks/NaringAI-release.apk
+
+      - name: Ladda upp APK som Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NaringAI-APK
+          path: release-apks/*.apk
+          retention-days: 90
+
+      - name: Publicera APK till GitHub Releases (tagg)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-apks/*.apk
+          generate_release_notes: true
+
+      - name: Publicera senaste APK till GitHub Releases (latest)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: NäringAI – Senaste APK
+          body: |
+            Automatiskt byggd Android-APK för **NäringAI** från `${{ github.ref_name }}` (`${{ github.sha }}`).
+
+            ### Så laddar du ner och installerar på Android
+            1. Tryck på **`NaringAI.apk`** under **Assets** nedan för att ladda ner appen.
+            2. Öppna den nedladdade filen på din Android-telefon och tillåt installation från okända källor om systemet frågar.
+          files: release-apks/*.apk
+          make_latest: true
+          draft: false
+          prerelease: false

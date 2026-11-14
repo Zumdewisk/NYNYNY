@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with body metrics, daily targets, and dietary preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The Firebase Auth UID of the user." },
+        "email": { "type": "string", "description": "User email address." },
+        "displayName": { "type": "string", "description": "User display name." },
+        "age": { "type": "integer", "description": "Age in years (10-120)." },
+        "heightCm": { "type": "integer", "description": "Height in centimeters (50-250)." },
+        "weightKg": { "type": "number", "description": "Current body weight in kilograms." },
+        "activityLevel": { "type": "string", "enum": ["sedentary", "light", "moderate", "active", "very_active"] },
+        "goalType": { "type": "string", "enum": ["lose_weight", "maintain", "gain_weight", "eat_healthier", "build_muscle"] },
+        "targetCalories": { "type": "integer", "description": "Daily target calories in kcal." },
+        "targetProteinG": { "type": "integer", "description": "Daily target protein in grams." },
+        "targetCarbsG": { "type": "integer", "description": "Daily target carbohydrates in grams." },
+        "targetFatG": { "type": "integer", "description": "Daily target fat in grams." },
+        "targetWaterMl": { "type": "integer", "description": "Daily target water intake in ml." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp via serverTimestamp()." }
+      },
+      "required": ["userId", "targetCalories", "targetProteinG", "targetCarbsG", "targetFatG", "createdAt"]
+    },
+    "MealItem": {
+      "title": "MealItem",
+      "description": "A single meal logged by the user with nutritional breakdown.",
+      "type": "object",
+      "properties": {
+        "mealId": { "type": "string", "description": "Unique ID for this meal." },
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "date": { "type": "string", "description": "Date format YYYY-MM-DD." },
+        "mealType": { "type": "string", "enum": ["frukost", "lunch", "middag", "mellanmal", "ovrigt"] },
+        "name": { "type": "string", "description": "Meal name or description." },
+        "calories": { "type": "integer", "description": "Energy in kcal." },
+        "protein": { "type": "number", "description": "Protein in grams." },
+        "carbs": { "type": "number", "description": "Carbohydrates in grams." },
+        "fat": { "type": "number", "description": "Fat in grams." },
+        "fiber": { "type": "number", "description": "Fiber in grams." },
+        "sugar": { "type": "number", "description": "Sugar in grams." },
+        "salt": { "type": "number", "description": "Salt in grams." },
+        "itemsJson": { "type": "string", "description": "Serialized JSON array of sub-ingredients." },
+        "aiAnalyzed": { "type": "boolean", "description": "Whether identified using AI vision." },
+        "imageUrl": { "type": "string", "description": "Optional local or uploaded image reference." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["userId", "date", "mealType", "name", "calories", "protein", "carbs", "fat", "createdAt"]
+    },
+    "WaterLog": {
+      "title": "WaterLog",
+      "description": "Log entry for water consumption.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "description": "Unique log entry ID." },
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "date": { "type": "string", "description": "Date format YYYY-MM-DD." },
+        "amountMl": { "type": "integer", "description": "Amount consumed in milliliters." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["userId", "date", "amountMl", "createdAt"]
+    },
+    "WorkoutLog": {
+      "title": "WorkoutLog",
+      "description": "Custom or synced workout session with duration and burned calories.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "description": "Unique workout log ID." },
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "date": { "type": "string", "description": "Date format YYYY-MM-DD." },
+        "workoutType": { "type": "string", "description": "Workout type identifier." },
+        "title": { "type": "string", "description": "Workout display title in Swedish." },
+        "durationMinutes": { "type": "integer", "description": "Duration in minutes." },
+        "caloriesBurned": { "type": "integer", "description": "Estimated or measured burned calories in kcal." },
+        "notes": { "type": "string", "description": "Optional workout notes." },
+        "syncedToHealthConnect": { "type": "boolean", "description": "Whether written to Health Connect." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["userId", "date", "workoutType", "title", "durationMinutes", "caloriesBurned", "createdAt"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "Saved custom recipe composed of Swedish food ingredients with calculated nutrition per serving.",
+      "type": "object",
+      "properties": {
+        "recipeId": { "type": "string", "description": "Unique recipe ID." },
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "name": { "type": "string", "description": "Recipe name." },
+        "description": { "type": "string", "description": "Optional recipe notes/instructions." },
+        "servings": { "type": "integer", "description": "Number of servings in the recipe." },
+        "totalCalories": { "type": "integer", "description": "Total calories for all servings." },
+        "totalProtein": { "type": "number", "description": "Total protein in grams." },
+        "totalCarbs": { "type": "number", "description": "Total carbs in grams." },
+        "totalFat": { "type": "number", "description": "Total fat in grams." },
+        "totalFiber": { "type": "number", "description": "Total fiber in grams." },
+        "itemsJson": { "type": "string", "description": "Serialized JSON array of FoodIngredient items." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["userId", "name", "servings", "totalCalories", "totalProtein", "totalCarbs", "totalFat", "itemsJson", "createdAt"]
+    },
+    "AiFoodCorrection": {
+      "title": "AiFoodCorrection",
+      "description": "User correction feedback and learned AI rule used to personalize future Gemini meal analyses.",
+      "type": "object",
+      "properties": {
+        "correctionId": { "type": "string", "description": "Unique correction ID." },
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "originalDish": { "type": "string", "description": "What AI originally predicted." },
+        "userFeedback": { "type": "string", "description": "User's Swedish explanation of what was wrong." },
+        "correctedDish": { "type": "string", "description": "Corrected dish name." },
+        "learningRule": { "type": "string", "description": "Concise learned rule stored for future prompts." },
+        "keywords": { "type": "string", "description": "Searchable keywords related to this correction." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["userId", "originalDish", "userFeedback", "correctedDish", "learningRule", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Individual user profile documents storing metrics and targets."
+    },
+    "/users/{userId}/meals/{mealId}": {
+      "schema": "MealItem",
+      "description": "Subcollection of meals logged for a user."
+    },
+    "/users/{userId}/water_logs/{logId}": {
+      "schema": "WaterLog",
+      "description": "Subcollection of water consumption logs for a user."
+    },
+    "/users/{userId}/workout_logs/{logId}": {
+      "schema": "WorkoutLog",
+      "description": "Subcollection of workout logs for a user."
+    },
+    "/users/{userId}/recipes/{recipeId}": {
+      "schema": "Recipe",
+      "description": "Subcollection of custom recipes saved by the user."
+    },
+    "/users/{userId}/ai_corrections/{correctionId}": {
+      "schema": "AiFoodCorrection",
+      "description": "Subcollection of AI correction feedback and learned rules per user."
+    }
+  }
+}
