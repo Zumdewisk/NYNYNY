@@ -59,7 +59,7 @@ jobs:
 
           set +o pipefail
           yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" --licenses >/dev/null 2>&1 || true
-          yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-36.1" "build-tools;36.0.0"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-36.1" "platforms;android-36" "build-tools;36.0.0"
           set -o pipefail
 
       - name: Återställ debug-keystore för signering
@@ -74,7 +74,11 @@ jobs:
           gradle-version: "9.3.1"
 
       - name: Bygg signerad APK
-        run: gradle assembleDebug --no-daemon
+        env:
+          JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
+        run: >
+          gradle assembleDebug --no-daemon --stacktrace --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
 
       - name: Förbered APK-fil för nedladdning
         run: |
@@ -101,9 +105,10 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
-          gradle assembleRelease --no-daemon
+          gradle assembleRelease --no-daemon --stacktrace --max-workers=2 -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
           cp app/build/outputs/apk/release/app-release.apk release-apks/NaringAI-release.apk
 
       - name: Ladda upp APK som Workflow Artifact
