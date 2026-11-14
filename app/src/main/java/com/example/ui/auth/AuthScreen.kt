@@ -81,6 +81,17 @@ tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
+private fun resolveDefaultWebClientId(context: Context): String? {
+    val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+    if (resId == 0) return null
+    return try {
+        context.getString(resId).takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to read default_web_client_id", e)
+        null
+    }
+}
+
 fun attemptAutoSignIn(
     context: Context,
     credentialManager: CredentialManager,
@@ -103,10 +114,9 @@ fun attemptAutoSignIn(
         return
     }
 
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
-        Log.e(TAG, "Missing default_web_client_id", e)
+    val clientId = resolveDefaultWebClientId(context)
+    if (clientId == null) {
+        Log.e(TAG, "Missing default_web_client_id")
         onUnauthenticated()
         return
     }
@@ -153,9 +163,8 @@ fun onGoogleSignInClicked(
         return
     }
 
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
+    val clientId = resolveDefaultWebClientId(context)
+    if (clientId == null) {
         onAuthError("Konfigurationen för Google-inloggning saknas.")
         return
     }
