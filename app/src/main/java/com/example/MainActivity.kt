@@ -183,7 +183,7 @@ class MainActivity : ComponentActivity() {
         firebaseInitState = initializeFirebaseAndAppCheck(this, intent)
 
         // Initiera Start.io SDK med Zevras App ID
-        StartAppSDK.init(this, "210102802", false)
+        StartAppSDK.init(this, "210102802", true)
 
         enableEdgeToEdge()
 
