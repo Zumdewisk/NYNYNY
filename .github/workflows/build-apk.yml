@@ -88,7 +88,8 @@ jobs:
             if [ -n "$GOOGLE_SERVICES_JSON" ]; then
               printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
             else
-              echo "::warning::app/google-services.json saknas i GitHub-repot. APK:n byggs ändå, men lägg till filen eller GitHub-hemligheten GOOGLE_SERVICES_JSON om Firebase/Google-inloggning ska fungera."
+              echo "::error::app/google-services.json saknas i GitHub-repot! Utan den kan Firebase och appen inte starta. Lägg till innehållet från app/google-services.json som en GitHub Secret med namnet GOOGLE_SERVICES_JSON (Settings -> Secrets and variables -> Actions) eller ladda ner APK direkt från AI Studio."
+              exit 1
             fi
           fi
 

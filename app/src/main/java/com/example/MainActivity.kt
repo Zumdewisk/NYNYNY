@@ -54,10 +54,19 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import com.example.data.repository.AiNutritionService
+
+sealed interface FirebaseInitState {
+    data object Ready : FirebaseInitState
+    data object MissingGoogleServicesConfig : FirebaseInitState
+    data class Error(val detail: String) : FirebaseInitState
+}
 
 private const val TAG = "MainActivity"
 private const val DEBUG_TOKEN_EXTRA = "FIREBASE_APPCHECK_DEBUG_TOKEN"
@@ -72,11 +81,19 @@ private const val BACKUP_DEBUG_TOKEN_KEY = "saved_debug_token"
  * (or backed-up user debug token) is synchronously committed into SharedPreferences.
  * Returns true if Firebase instance and App Check are verified ready.
  */
-fun configureAppCheck(context: Context, intent: Intent?): Boolean {
+fun initializeFirebaseAndAppCheck(context: Context, intent: Intent?): FirebaseInitState {
     return try {
-        // 1. Ensure FirebaseApp is initialized
+        val hasGoogleAppId = context.resources.getIdentifier("google_app_id", "string", context.packageName) != 0
         if (FirebaseApp.getApps(context).isEmpty()) {
-            FirebaseApp.initializeApp(context)
+            val initialized = FirebaseApp.initializeApp(context)
+            if (initialized == null || FirebaseApp.getApps(context).isEmpty()) {
+                Log.e(TAG, "FirebaseApp could not be initialized (hasGoogleAppId=$hasGoogleAppId).")
+                return if (!hasGoogleAppId) {
+                    FirebaseInitState.MissingGoogleServicesConfig
+                } else {
+                    FirebaseInitState.Error("FirebaseApp kunde inte initieras.")
+                }
+            }
             Log.d(TAG, "FirebaseApp initialized.")
         }
 
@@ -93,7 +110,6 @@ fun configureAppCheck(context: Context, intent: Intent?): Boolean {
 
             val intentDebugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)?.trim()
             if (!intentDebugToken.isNullOrEmpty()) {
-                // Synchronous commit is mandatory so token is persisted before provider factory reads it
                 prefs.edit()
                     .putString(DEBUG_SECRET_KEY, intentDebugToken)
                     .commit()
@@ -124,7 +140,6 @@ fun configureAppCheck(context: Context, intent: Intent?): Boolean {
             )
             Log.d(TAG, "DebugAppCheckProviderFactory installed with auto-refresh.")
         } else {
-            // Release builds: Check for provisioned reCAPTCHA Enterprise site key first, otherwise Play Integrity
             val resId = context.resources.getIdentifier("recaptcha_site_key", "string", context.packageName)
             val siteKey = if (resId != 0) context.getString(resId) else ""
             if (siteKey.isNotBlank()) {
@@ -141,15 +156,19 @@ fun configureAppCheck(context: Context, intent: Intent?): Boolean {
                 Log.d(TAG, "PlayIntegrityAppCheckProviderFactory installed for release builds.")
             }
         }
-        true
+        FirebaseInitState.Ready
     } catch (e: Exception) {
         Log.e(TAG, "Failed to initialize Firebase App Check", e)
-        false
+        FirebaseInitState.Error(e.localizedMessage ?: "Okänt fel vid initiering av Firebase.")
     }
 }
 
+fun configureAppCheck(context: Context, intent: Intent?): Boolean {
+    return initializeFirebaseAndAppCheck(context, intent) == FirebaseInitState.Ready
+}
+
 class MainActivity : ComponentActivity() {
-    private var isFirebaseReady by mutableStateOf(false)
+    private var firebaseInitState by mutableStateOf<FirebaseInitState>(FirebaseInitState.Error("Initieras..."))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -157,7 +176,7 @@ class MainActivity : ComponentActivity() {
         com.example.data.model.SwedishFoodDatabase.initialize(applicationContext)
 
         // Mandatory App Check configuration with launch intent before any UI or Firebase calls
-        isFirebaseReady = configureAppCheck(this, intent)
+        firebaseInitState = initializeFirebaseAndAppCheck(this, intent)
 
         enableEdgeToEdge()
 
@@ -168,9 +187,9 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     AppRoot(
-                        isFirebaseReady = isFirebaseReady,
+                        firebaseInitState = firebaseInitState,
                         onRetryFirebase = {
-                            isFirebaseReady = configureAppCheck(this, intent)
+                            firebaseInitState = initializeFirebaseAndAppCheck(this, intent)
                         }
                     )
                 }
@@ -181,15 +200,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        isFirebaseReady = configureAppCheck(this, intent)
+        firebaseInitState = initializeFirebaseAndAppCheck(this, intent)
     }
 }
 
 @Composable
 fun AppRoot(
-    isFirebaseReady: Boolean,
+    firebaseInitState: FirebaseInitState,
     onRetryFirebase: () -> Unit
 ) {
+    val isFirebaseReady = firebaseInitState is FirebaseInitState.Ready
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -212,8 +232,21 @@ fun AppRoot(
         }
     }
 
-    if (!isFirebaseReady) {
-        // Firebase initialization guard: prevents any Firebase or AiNutritionService calls until ready
+    if (firebaseInitState !is FirebaseInitState.Ready) {
+        val isMissingConfig = firebaseInitState is FirebaseInitState.MissingGoogleServicesConfig
+        val titleText = if (isMissingConfig) {
+            "Firebase-konfiguration saknas i APK:n"
+        } else {
+            "Kunde inte starta säkerhetstjänster"
+        }
+        val bodyText = when (firebaseInitState) {
+            is FirebaseInitState.MissingGoogleServicesConfig ->
+                "Den här APK-filen byggdes utan google-services.json.\n\nLägg till innehållet från app/google-services.json som GitHub Secret (GOOGLE_SERVICES_JSON) och bygg om APK:n, eller generera APK:n direkt från AI Studio."
+            is FirebaseInitState.Error ->
+                firebaseInitState.detail
+            FirebaseInitState.Ready -> ""
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -229,13 +262,13 @@ fun AppRoot(
                     modifier = Modifier
                         .size(68.dp)
                         .clip(CircleShape)
-                        .background(EmeraldPrimary.copy(alpha = 0.15f)),
+                        .background(MaterialTheme.colorScheme.errorContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = EmeraldPrimary,
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Konfigurationsfel",
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(36.dp)
                     )
                 }
@@ -247,20 +280,24 @@ fun AppRoot(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
-                    color = EmeraldPrimary,
-                    strokeWidth = 2.5.dp
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center
                 )
 
                 Text(
-                    text = "Initierar Firebase och säkerhetstjänster...",
+                    text = bodyText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
 
                 Button(
                     onClick = onRetryFirebase,
+                    modifier = Modifier.testTag("retry_firebase_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = Color.Black),
                     shape = RoundedCornerShape(12.dp)
                 ) {
