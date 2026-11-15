@@ -71,27 +71,85 @@ jobs:
           fi
 
       - name: Återställ debug-keystore för signering
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_BASE64 || vars.DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ ! -f debug.keystore ]; then
             if [ -f debug.keystore.base64 ]; then
               tr -d '\r\n' < debug.keystore.base64 | base64 -d > debug.keystore
+            elif [ -n "$DEBUG_KEYSTORE_B64" ]; then
+              printf '%s' "$DEBUG_KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > debug.keystore
             else
-              keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+              echo "::error::debug.keystore.base64 saknas i GitHub-repot och ingen DEBUG_KEYSTORE_BASE64-hemlighet hittades! Om en slumpad keystore skapas fungerar inte Google-inloggningen i APK:n. Pusha debug.keystore.base64 till repot eller lägg till innehållet som GitHub Secret DEBUG_KEYSTORE_BASE64."
+              exit 1
             fi
           fi
 
-      - name: Kontrollera google-services.json
+      - name: Kontrollera google-services.json och SHA-1 för Google-inloggning
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON || vars.GOOGLE_SERVICES_JSON }}
         run: |
           if [ ! -f app/google-services.json ]; then
             if [ -n "$GOOGLE_SERVICES_JSON" ]; then
               printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+              if ! python3 -m json.tool app/google-services.json >/dev/null 2>&1; then
+                echo "::error::Innehållet i GOOGLE_SERVICES_JSON är inte giltig JSON. Kontrollera att du kopierade hela filen från { till }."
+                exit 1
+              fi
             else
-              echo "::error::app/google-services.json saknas i GitHub-repot! Utan den kan Firebase och appen inte starta. Lägg till innehållet från app/google-services.json som en GitHub Secret med namnet GOOGLE_SERVICES_JSON (Settings -> Secrets and variables -> Actions) eller ladda ner APK direkt från AI Studio."
+              echo "::error::app/google-services.json saknas i GitHub-repot! Lägg till innehållet från app/google-services.json som en GitHub Secret med namnet GOOGLE_SERVICES_JSON (Settings -> Secrets and variables -> Actions) och kör om arbetsflödet."
               exit 1
             fi
           fi
+
+          KEYSTORE_SHA1=$(keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey \
+            | sed -n 's/.*SHA1:[[:space:]]*\([0-9A-Fa-f:]*\).*/\1/p' | head -n 1)
+          if [ -z "$KEYSTORE_SHA1" ]; then
+            echo "::error::Kunde inte läsa SHA-1 från debug.keystore. Kontrollera att debug.keystore.base64 / DEBUG_KEYSTORE_BASE64 är giltig."
+            exit 1
+          fi
+          echo "APK debug.keystore SHA-1: $KEYSTORE_SHA1"
+
+          KEYSTORE_SHA1="$KEYSTORE_SHA1" python3 - <<'PY'
+          import json, os, sys
+
+          sha1_colon = os.environ["KEYSTORE_SHA1"].strip().upper()
+          sha1_norm = sha1_colon.replace(":", "").lower()
+          expected_pkg = "com.aistudio.naringai.kzpxvm"
+
+          with open("app/google-services.json", "r", encoding="utf-8") as f:
+              gs = json.load(f)
+
+          clients = gs.get("client", [])
+          matching_client = None
+          for c in clients:
+              pkg = c.get("client_info", {}).get("android_client_info", {}).get("package_name")
+              if pkg == expected_pkg:
+                  matching_client = c
+                  break
+
+          if not matching_client:
+              found = [c.get("client_info", {}).get("android_client_info", {}).get("package_name") for c in clients]
+              print(f"::error::google-services.json saknar paketnamnet {expected_pkg} (hittade: {found}). Google-inloggning kommer att misslyckas.")
+              sys.exit(1)
+
+          oauth_clients = matching_client.get("oauth_client", [])
+          has_web_client = any(oc.get("client_type") == 3 and oc.get("client_id") for oc in oauth_clients)
+          if not has_web_client:
+              print("::error::google-services.json saknar en Web OAuth-klient (client_type 3 / default_web_client_id). Google-inloggning kommer att misslyckas.")
+              sys.exit(1)
+
+          cert_hashes = [
+              oc.get("android_info", {}).get("certificate_hash", "").lower()
+              for oc in oauth_clients
+              if oc.get("client_type") == 1 and oc.get("android_info", {}).get("package_name") == expected_pkg
+          ]
+          if sha1_norm not in cert_hashes:
+              print(f"::error::Signeringsnyckelns SHA-1 ({sha1_colon}) matchar INTE google-services.json ({cert_hashes}). Google-inloggning i APK:n skulle nekas! Kontrollera att debug.keystore.base64 / DEBUG_KEYSTORE_BASE64 och GOOGLE_SERVICES_JSON kommer från samma AI Studio-/Firebase-projekt.")
+              sys.exit(1)
+
+          print("Verifierat: debug.keystore SHA-1 och Web OAuth-klient matchar app/google-services.json.")
+          PY
 
       - name: Konfigurera Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v6

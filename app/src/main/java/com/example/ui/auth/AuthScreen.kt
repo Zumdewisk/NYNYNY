@@ -2,6 +2,9 @@ package com.example.ui.auth
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -20,10 +23,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
@@ -58,7 +63,11 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import com.example.R
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialInterruptedException
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
+import androidx.credentials.exceptions.GetCredentialUnsupportedException
+import androidx.credentials.exceptions.NoCredentialException
 import com.example.ui.theme.EmeraldDark
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.MintAccent
@@ -67,11 +76,15 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.security.MessageDigest
 
 private const val TAG = "AuthScreen"
 
@@ -90,6 +103,41 @@ private fun resolveDefaultWebClientId(context: Context): String? {
         Log.e(TAG, "Failed to read default_web_client_id", e)
         null
     }
+}
+
+@Suppress("DEPRECATION")
+private fun getApkSigningSha1(context: Context): String? {
+    return try {
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val info = context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+            val signingInfo = info.signingInfo ?: return null
+            if (signingInfo.hasMultipleSigners()) {
+                signingInfo.apkContentsSigners
+            } else {
+                signingInfo.signingCertificateHistory
+            }
+        } else {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNATURES
+            ).signatures
+        }
+        val certBytes = signatures?.firstOrNull()?.toByteArray() ?: return null
+        val digest = MessageDigest.getInstance("SHA-1").digest(certBytes)
+        digest.joinToString(":") { byte -> "%02X".format(byte) }
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not inspect APK signing SHA-1: ${e.message}")
+        null
+    }
+}
+
+private fun formatConfigError(context: Context, prefix: String): String {
+    val sha1 = getApkSigningSha1(context)
+    val shaLine = if (sha1 != null) "\n\nAPK-signatur (SHA-1): $sha1" else ""
+    return "$prefix$shaLine"
 }
 
 fun attemptAutoSignIn(
@@ -173,6 +221,7 @@ fun onGoogleSignInClicked(
     val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
 
     scope.launch {
+        val startTimeMs = SystemClock.elapsedRealtime()
         try {
             val result = credentialManager.getCredential(activity, request)
             val credential = result.credential
@@ -185,13 +234,71 @@ fun onGoogleSignInClicked(
                 onAuthError("Oväntad inloggningstyp. Försök igen.")
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w(TAG, "Google Sign-In avbröts av användaren: ${e.message}", e)
-            onAuthCancelled()
+            val elapsedMs = SystemClock.elapsedRealtime() - startTimeMs
+            val rawMsg = e.message.orEmpty()
+            Log.w(TAG, "Google Sign-In avbröts eller nekades (${elapsedMs}ms): $rawMsg", e)
+            val looksLikeConfigAbort = elapsedMs < 800L ||
+                rawMsg.contains("2844", ignoreCase = true) ||
+                rawMsg.contains("developer", ignoreCase = true) ||
+                rawMsg.contains("caller", ignoreCase = true) ||
+                rawMsg.contains("signature", ignoreCase = true)
+            if (looksLikeConfigAbort) {
+                onAuthError(
+                    formatConfigError(
+                        context,
+                        "Google-inloggningen avvisades direkt av Google Play-tjänster. Kontrollera att APK:ns signeringsnyckel (SHA-1) är registrerad i Firebase / google-services.json och att ett Google-konto finns på enheten."
+                    )
+                )
+            } else {
+                onAuthCancelled()
+            }
+        } catch (e: NoCredentialException) {
+            Log.w(TAG, "Inga Google-inloggningsuppgifter tillgängliga: ${e.message}", e)
+            onAuthError(
+                formatConfigError(
+                    context,
+                    "Inget Google-konto kunde användas för inloggning. Kontrollera att du är inloggad med ett Google-konto på telefonen, att inloggningsfrågor är aktiverade under Google-kontoinställningar och att APK:ns SHA-1 matchar Firebase."
+                )
+            )
+        } catch (e: GetCredentialProviderConfigurationException) {
+            Log.e(TAG, "Credential Manager provider saknas", e)
+            onAuthError("Google Play-tjänster för inloggning saknas eller behöver uppdateras på enheten.")
+        } catch (e: GetCredentialUnsupportedException) {
+            Log.e(TAG, "Credential Manager stöds inte på enheten", e)
+            onAuthError("Enheten stöder inte Google Credential Manager. Uppdatera Google Play-tjänster och försök igen.")
+        } catch (e: GetCredentialInterruptedException) {
+            Log.w(TAG, "Inloggningen avbröts tillfälligt", e)
+            onAuthError("Inloggningen avbröts tillfälligt. Tryck på Fortsätt med Google för att försöka igen.")
+        } catch (e: GetCredentialException) {
+            Log.e(TAG, "Google Credential Manager misslyckades (${e.type})", e)
+            val msg = e.localizedMessage ?: e.message ?: "Inloggningen misslyckades."
+            if (msg.contains("2844") ||
+                msg.contains("Developer console", ignoreCase = true) ||
+                msg.contains("10:") ||
+                msg.contains("12500")
+            ) {
+                onAuthError(
+                    formatConfigError(
+                        context,
+                        "Google-inloggningen blockerades på grund av felaktig app-signatur eller OAuth-konfiguration i Firebase (kod 2844/10). Kontrollera att GitHub-bygget använde rätt debug.keystore.base64 och google-services.json."
+                    )
+                )
+            } else {
+                onAuthError("Google-inloggning misslyckades: $msg")
+            }
+        } catch (e: FirebaseAuthException) {
+            Log.e(TAG, "Firebase Auth misslyckades (${e.errorCode})", e)
+            onAuthError("Firebase-autentisering misslyckades (${e.errorCode}): ${e.localizedMessage ?: "Försök igen."}")
         } catch (e: Exception) {
             Log.e(TAG, "Google Sign-In misslyckades", e)
             val msg = e.localizedMessage ?: "Inloggningen misslyckades."
-            if (msg.contains("2844") || msg.contains("Developer console")) {
-                onAuthError("Google Play-tjänster uppdaterar autentiseringskonfigurationen. Vänta ett ögonblick och tryck sedan på knappen igen.")
+            if (msg.contains("2844") || msg.contains("Developer console", ignoreCase = true)) {
+                onAuthError(
+                    formatConfigError(
+                        context,
+                        "Google-inloggningen blockerades på grund av felaktig app-signatur eller OAuth-konfiguration i Firebase."
+                    )
+                )
             } else {
                 onAuthError(msg)
             }
@@ -209,14 +316,16 @@ fun signOutUser(
         .edit()
         .putBoolean("was_signed_in", false)
         .apply()
-    Firebase.auth.signOut()
     scope.launch {
-        try {
-            credentialManager.clearCredentialState(ClearCredentialStateRequest())
-        } catch (e: Exception) {
-            Log.e(TAG, "Kunde inte rensa inloggningsstatus", e)
-        } finally {
-            onSignOutComplete()
+        withContext(NonCancellable) {
+            try {
+                credentialManager.clearCredentialState(ClearCredentialStateRequest())
+            } catch (e: Exception) {
+                Log.w(TAG, "Kunde inte rensa inloggningsstatus: ${e.message}")
+            } finally {
+                Firebase.auth.signOut()
+                onSignOutComplete()
+            }
         }
     }
 }
@@ -319,13 +428,35 @@ fun AuthScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (errorMessage != null) {
-                    Text(
-                        text = errorMessage ?: "",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = "Inloggningsfel",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            SelectionContainer {
+                                Text(
+                                    text = errorMessage ?: "",
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Button(

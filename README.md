@@ -17,12 +17,13 @@ Varje gång kod pushas till `main`/`master` (eller när arbetsflödet startas ma
 3. Öppna den senaste gröna körningen och ladda ner **`NaringAI-APK`** längst ner under **Artifacts**.
 
 ### (Valfritt) Firebase och egen release-signering
-Arbetsflödet signerar automatiskt `NaringAI.apk` med projektets inbyggda `debug.keystore.base64` så att appen går att installera direkt.
+Arbetsflödet signerar `NaringAI.apk` med projektets `debug.keystore.base64` (eller GitHub Secret `DEBUG_KEYSTORE_BASE64`) och verifierar automatiskt att nyckelns SHA-1 matchar `google-services.json` så att Google-inloggningen fungerar.
 
-Om `google-services.json` inte följde med när projektet pushades till GitHub kan du ändå bygga APK:n, men för att **Firebase, AI och Google-inloggning** ska fungera i den nedladdade APK:n lägger du in innehållet från din `google-services.json` som en hemlighet under **Settings → Secrets and variables → Actions** i GitHub:
+Om `google-services.json` eller `debug.keystore.base64` inte följde med när projektet pushades till GitHub lägger du in dem under **Settings → Secrets and variables → Actions** i GitHub:
 - `GOOGLE_SERVICES_JSON` (hela JSON-innehållet från Firebase `google-services.json`)
+- `DEBUG_KEYSTORE_BASE64` (innehållet i `debug.keystore.base64`, krävs om filen saknas i repot så att Google-inloggningens SHA-1 stämmer)
 
-Om du även vill att `NaringAI-release.apk` ska byggas med en egen release-nyckel lägger du till följande under **Secrets**:
+Om du även vill att `NaringAI-release.apk` ska byggas med en egen release-nyckel lägger du till följande under **Secrets** (och registrerar release-nyckelns SHA-1/SHA-256 i Firebase Console):
 - `KEYSTORE_BASE64` (base64-kodad `.jks`-fil med alias `upload`)
 - `STORE_PASSWORD`
 - `KEY_PASSWORD`
