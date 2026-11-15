@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -213,12 +214,28 @@ fun AppNavigation(
     }
     var currentScreen by rememberSaveable(stateSaver = screenSaver) { mutableStateOf<Screen>(Screen.Dashboard) }
 
-    // Scanner / Review transition state
+    // Scanner / Review transition state & origin screen return tracking
     var pendingAnalysisResult by remember { mutableStateOf<AiMealAnalysisResult?>(null) }
     var pendingMealImageUrl by rememberSaveable { mutableStateOf("") }
     var selectedMealCategoryForAdd by rememberSaveable { mutableStateOf("lunch") }
+    var mealEntryOriginScreen by rememberSaveable(stateSaver = screenSaver) { mutableStateOf<Screen>(Screen.Dashboard) }
+    var diaryFocusCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var diaryFocusTrigger by rememberSaveable { mutableIntStateOf(0) }
     var autoLaunchCamera by rememberSaveable { mutableStateOf(false) }
     var autoLaunchGallery by rememberSaveable { mutableStateOf(false) }
+
+    val navigateAfterMealEntry: (String?) -> Unit = { categoryToFocus ->
+        autoLaunchCamera = false
+        autoLaunchGallery = false
+        if (mealEntryOriginScreen == Screen.Diary) {
+            diaryFocusCategory = categoryToFocus ?: selectedMealCategoryForAdd
+            diaryFocusTrigger++
+            currentScreen = Screen.Diary
+        } else {
+            currentScreen = Screen.Dashboard
+        }
+        mealEntryOriginScreen = Screen.Dashboard
+    }
 
     // Initialize initial user profile if non-existent
     androidx.compose.runtime.LaunchedEffect(currentUserId) {
@@ -253,14 +270,10 @@ fun AppNavigation(
                     pendingAnalysisResult = null
                     AiNutritionService.lastAnalysisResult = null
                     AiNutritionService.lastImageUrl = ""
-                    autoLaunchCamera = false
-                    autoLaunchGallery = false
-                    currentScreen = Screen.Dashboard
+                    navigateAfterMealEntry(null)
                 }
-                Screen.LogFood -> {
-                    autoLaunchCamera = false
-                    autoLaunchGallery = false
-                    currentScreen = Screen.Dashboard
+                Screen.LogFood, Screen.ManualEntry -> {
+                    navigateAfterMealEntry(null)
                 }
                 else -> {
                     currentScreen = Screen.Dashboard
@@ -328,6 +341,7 @@ fun AppNavigation(
                         NavigationBarItem(
                             selected = currentScreen == Screen.LogFood,
                             onClick = {
+                                mealEntryOriginScreen = Screen.Dashboard
                                 autoLaunchCamera = true
                                 autoLaunchGallery = false
                                 currentScreen = Screen.LogFood
@@ -429,11 +443,13 @@ fun AppNavigation(
                             }
                         },
                         onOpenAiCamera = {
+                            mealEntryOriginScreen = Screen.Dashboard
                             autoLaunchCamera = true
                             autoLaunchGallery = false
                             currentScreen = Screen.LogFood
                         },
                         onOpenAiGallery = {
+                            mealEntryOriginScreen = Screen.Dashboard
                             autoLaunchCamera = false
                             autoLaunchGallery = true
                             currentScreen = Screen.LogFood
@@ -442,6 +458,7 @@ fun AppNavigation(
                             currentScreen = Screen.AiAssistant
                         },
                         onLogMealCategory = { category ->
+                            mealEntryOriginScreen = Screen.Dashboard
                             selectedMealCategoryForAdd = category
                             currentScreen = Screen.ManualEntry
                         },
@@ -473,12 +490,14 @@ fun AppNavigation(
                         onNextDay = { selectedDateObj = selectedDateObj.plusDays(1) },
                         meals = todayMeals,
                         onAddMealWithAi = { cat ->
+                            mealEntryOriginScreen = Screen.Diary
                             selectedMealCategoryForAdd = cat
                             autoLaunchCamera = true
                             autoLaunchGallery = false
                             currentScreen = Screen.LogFood
                         },
                         onAddMealManual = { cat ->
+                            mealEntryOriginScreen = Screen.Diary
                             selectedMealCategoryForAdd = cat
                             currentScreen = Screen.ManualEntry
                         },
@@ -527,7 +546,9 @@ fun AppNavigation(
                                     snackbarHostState.showSnackbar("Inlärd AI-regel borttagen")
                                 }
                             }
-                        }
+                        },
+                        focusCategory = diaryFocusCategory,
+                        focusTrigger = diaryFocusTrigger
                     )
                 }
 
@@ -742,9 +763,7 @@ fun AppNavigation(
                             currentScreen = Screen.ManualEntry
                         },
                         onDismiss = {
-                            autoLaunchCamera = false
-                            autoLaunchGallery = false
-                            currentScreen = Screen.Dashboard
+                            navigateAfterMealEntry(null)
                         },
                         autoLaunchCamera = autoLaunchCamera,
                         autoLaunchGallery = autoLaunchGallery
@@ -768,18 +787,14 @@ fun AppNavigation(
                                 pendingAnalysisResult = null
                                 AiNutritionService.lastAnalysisResult = null
                                 AiNutritionService.lastImageUrl = ""
-                                autoLaunchCamera = false
-                                autoLaunchGallery = false
-                                currentScreen = Screen.Dashboard
+                                navigateAfterMealEntry(meal.mealType)
                             }
                         },
                         onCancel = {
                             pendingAnalysisResult = null
                             AiNutritionService.lastAnalysisResult = null
                             AiNutritionService.lastImageUrl = ""
-                            autoLaunchCamera = false
-                            autoLaunchGallery = false
-                            currentScreen = Screen.Dashboard
+                            navigateAfterMealEntry(null)
                         },
                         aiNutritionService = effectiveAiNutritionService,
                         learnedCorrections = aiCorrections,
@@ -811,11 +826,11 @@ fun AppNavigation(
                             coroutineScope.launch {
                                 repository.addMeal(meal)
                                 snackbarHostState.showSnackbar("'${meal.name}' loggad!")
-                                currentScreen = Screen.Dashboard
+                                navigateAfterMealEntry(meal.mealType)
                             }
                         },
                         onBack = {
-                            currentScreen = Screen.Dashboard
+                            navigateAfterMealEntry(null)
                         }
                     )
                 }

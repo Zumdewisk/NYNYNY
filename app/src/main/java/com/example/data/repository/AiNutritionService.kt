@@ -166,52 +166,70 @@ class AiNutritionService {
     }
 
     // Structured JSON Schema for Global Food Database Search (Lifesum equivalent)
-    private val globalFoodSearchSchema = Schema.array(
-        items = Schema.obj(
-            properties = mapOf(
-                "name" to Schema.string("Namn på livsmedlet, rätten eller produkten på svenska"),
-                "brand" to Schema.string("Varumärke eller tillverkare eller restaurang om tillämpligt, annars tomt"),
-                "category" to Schema.string("Kategori, t.ex. 'Nötsmör & Pålägg', 'Mejeri', 'Mataffär', 'Snabbmat'"),
-                "itemType" to Schema.enumeration(listOf("BRAND", "MEAL", "BASIC", "FASTFOOD", "SUPERMARKET", "DRINK"), "Typ av livsmedel eller dryck"),
-                "caloriesPer100g" to Schema.integer("Energi i kcal per 100 gram"),
-                "proteinPer100g" to Schema.double("Protein i gram per 100g"),
-                "carbsPer100g" to Schema.double("Kolhydrater i gram per 100g"),
-                "fatPer100g" to Schema.double("Fett i gram per 100g"),
-                "fiberPer100g" to Schema.double("Fiber i gram per 100g"),
-                "sugarPer100g" to Schema.double("Socker i gram per 100g"),
-                "saltPer100g" to Schema.double("Salt i gram per 100g"),
-                "standardPortionGrams" to Schema.integer("Normal medelportion i gram baserad på vad en vuxen människa normalt äter"),
-                "standardPortionDescription" to Schema.string("Portionsbeskrivning t.ex. '1 msk (20 g)' eller '1 portion (250 g)'"),
-                "densityGramsPerMl" to Schema.double("Densitet i g/ml (1.0 för vatten/fasta rätter, 1.05 för jordnötssmör, 1.03 för mjölk, 0.92 för olja)")
-            )
-        ),
-        description = "Lista över matchande livsmedel med exakta näringsvärden"
+    private val globalFoodItemSchema = Schema.obj(
+        properties = mapOf(
+            "name" to Schema.string("Namn på livsmedlet, rätten eller produkten på svenska"),
+            "brand" to Schema.string("Varumärke, tillverkare, butikskedja (t.ex. ICA, Garant, Eldorado, Coop) eller restaurang om tillämpligt, annars tom sträng"),
+            "category" to Schema.string("Kategori, t.ex. 'Nötsmör & Pålägg', 'Mejeri', 'Mataffär', 'Snabbmat'"),
+            "itemType" to Schema.enumeration(listOf("BRAND", "MEAL", "BASIC", "FASTFOOD", "SUPERMARKET", "DRINK"), "Typ av livsmedel eller dryck"),
+            "caloriesPer100g" to Schema.integer("Energi i kcal per 100 gram"),
+            "proteinPer100g" to Schema.double("Protein i gram per 100g"),
+            "carbsPer100g" to Schema.double("Kolhydrater i gram per 100g"),
+            "fatPer100g" to Schema.double("Fett i gram per 100g"),
+            "fiberPer100g" to Schema.double("Fiber i gram per 100g"),
+            "sugarPer100g" to Schema.double("Socker i gram per 100g"),
+            "saltPer100g" to Schema.double("Salt i gram per 100g"),
+            "standardPortionGrams" to Schema.integer("Normal medelportion i gram baserad på vad en vuxen människa normalt äter"),
+            "standardPortionDescription" to Schema.string("Portionsbeskrivning t.ex. '1 msk (20 g)' eller '1 portion (250 g)'"),
+            "densityGramsPerMl" to Schema.double("Densitet i g/ml (1.0 för vatten/fasta rätter, 1.05 för jordnötssmör, 1.03 för mjölk, 0.92 för olja)")
+        )
     )
+
+    private val globalFoodSearchSchema = Schema.obj(
+        properties = mapOf(
+            "items" to Schema.array(
+                items = globalFoodItemSchema,
+                description = "Lista över 4 till 6 matchande livsmedel med exakta näringsvärden per 100 gram"
+            )
+        )
+    )
+
+    private val foodSearchGenerationConfig = generationConfig {
+        responseMimeType = "application/json"
+        responseSchema = globalFoodSearchSchema
+        temperature = 0.1f
+    }
+
+    private val foodSearchSystemPrompt = """
+        Du är Sveriges och världens mest kompletta mat- och dagligvarudatabas (motsvarande hela sortimentet hos ICA, Willys, Hemköp, Coop, Lidl, Lifesum och MyFitnessPal).
+        Du har full kunskap om ALLA varor som säljs i butik och på restaurang:
+        - Alla varumärken och butiksmärken (Garant, Eldorado, ICA, ICA Basic, Coop, Änglamark, Green Choice, Skippy, Nutella, Pågen, Arla, Scan, Felix, Findus, Barebells, Nocco m.fl.).
+        - Alla råvaror, livsmedel, pålägg, färdigrätter och restaurangmenyer.
+        När användaren söker efter mat:
+        1. Returnera JSON-objektet {"items": [...]} med 4 till 6 relevanta träffar som bäst motsvarar sökningen.
+        2. Ange alltid tillverkare eller butiksmärke i 'brand' (t.ex. 'Green Choice', 'ICA', 'Garant (Willys & Hemköp)', 'Skippy', 'Arla').
+        3. Sätt 'itemType' till 'DRINK' för alla drycker (kaffe, te, läsk, juice, mjölk, energidryck, öl, vin, smoothies), 'SUPERMARKET' för dagligvaror, 'BRAND' för allmänna märken, 'MEAL' för lagad mat, 'BASIC' för råvaror, eller 'FASTFOOD' för snabbmat.
+        4. Ange korrekta officiella näringsvärden per 100 gram.
+        5. 'standardPortionGrams' ska ALLTID motsvara vad en normal människa äter som en medelportion (t.ex. 20g för jordnötssmör/pålägg, 10g för smör, 40g för flingor, 150-350g för lunch/middag).
+        6. Svara alltid på ren svenska med enbart giltig JSON.
+    """.trimIndent()
 
     private val foodSearchModel by lazy {
         firebaseAi.generativeModel(
             modelName = "gemini-3.8-flash",
-            generationConfig = generationConfig {
-                responseMimeType = "application/json"
-                responseSchema = globalFoodSearchSchema
-                temperature = 0.1f
-            },
+            generationConfig = foodSearchGenerationConfig,
             systemInstruction = content {
-                text(
-                    """
-                    Du är Sveriges och världens mest kompletta mat- och dagligvarudatabas (motsvarande hela sortimentet hos ICA, Willys, Hemköp, Coop, Lidl, Lifesum och MyFitnessPal).
-                    Du har full kunskap om ALLA varor som säljs i butik:
-                    - Alla varumärken och butiksmärken (Garant, Eldorado, ICA, ICA Basic, Coop, Änglamark, Green Choice, Skippy, Nutella, Pågen, Arla, Scan, Felix, Findus, Barebells, Nocco m.fl.).
-                    - Alla råvaror, livsmedel och pålägg (Jordnötssmör creamy/crunchy/eko, nötsmör, mandelsmör, smör, ost, bröd, chark, färs, köttbullar, pasta, ris, såser, chips, godis och fryst mat).
-                    När användaren söker efter mat:
-                    1. Returnera 4 till 6 relevanta träffar som bäst motsvarar sökningen.
-                    2. Ange alltid tillverkare eller butiksmärke i 'brand' (t.ex. 'Green Choice', 'ICA', 'Garant (Willys & Hemköp)', 'Skippy', 'Arla').
-                    3. Sätt 'itemType' till 'DRINK' för alla drycker (kaffe, te, läsk, juice, mjölk, energidryck, öl, vin, smoothies), 'SUPERMARKET' för dagligvaror, 'BRAND' för allmänna märken, 'MEAL' för lagad mat, eller 'FASTFOOD' för snabbmat.
-                    4. Ange korrekta officiella näringsvärden per 100 gram.
-                    5. 'standardPortionGrams' ska ALLTID motsvara vad en normal människa äter som en medelportion (t.ex. 20g för jordnötssmör/pålägg, 10g för smör, 40g för flingor, 150-350g för lunch/middag).
-                    6. Svara alltid på ren svenska.
-                    """.trimIndent()
-                )
+                text(foodSearchSystemPrompt)
+            }
+        )
+    }
+
+    private val foodSearchModelLite by lazy {
+        firebaseAi.generativeModel(
+            modelName = "gemini-3.5-flash-lite",
+            generationConfig = foodSearchGenerationConfig,
+            systemInstruction = content {
+                text(foodSearchSystemPrompt)
             }
         )
     }
@@ -450,22 +468,67 @@ class AiNutritionService {
     }
 
     suspend fun searchGlobalFoodDatabase(query: String): Result<List<SwedishFoodEntry>> {
-        if (query.isBlank()) return Result.success(emptyList())
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return Result.success(emptyList())
         if (!isFirebaseReady()) {
-            return Result.failure(IllegalStateException("Firebase-instansen är inte redo. Initiera Firebase innan AI-anrop."))
+            return Result.failure(IllegalStateException("Firebase är inte redo. Starta om appen och försök igen."))
         }
         return try {
-            withTimeout(14_000L) {
-                val prompt = "Sök i matbutikernas och världens matdatabas efter alla varor och produkter som matchar: \"$query\""
-                val response = executeWithAppCheckRetry {
-                    foodSearchModel.generateContent(content { text(prompt) })
+            withTimeout(45_000L) {
+                val prompt = """
+                    Sök i svenska matbutikers (ICA, Willys, Hemköp, Coop, Lidl) och världens livsmedelsdatabas efter varor, varumärken, rätter och restaurangmat som matchar: "$cleanQuery".
+                    Returnera ett JSON-objekt med nyckeln "items" innehållande 4 till 6 träffar med exakta näringsvärden per 100g.
+                """.trimIndent()
+
+                val response = try {
+                    executeWithAppCheckRetry {
+                        foodSearchModel.generateContent(content { text(prompt) })
+                    }
+                } catch (primaryErr: Exception) {
+                    if (isQuotaExceededError(primaryErr)) {
+                        Log.w(TAG, "[Food Search] Primär modell nådde kvotgräns, växlar till gemini-3.5-flash-lite", primaryErr)
+                        executeWithAppCheckRetry {
+                            foodSearchModelLite.generateContent(content { text(prompt) })
+                        }
+                    } else {
+                        throw primaryErr
+                    }
                 }
-                val jsonString = response.text ?: throw IllegalStateException("Tomt svar från AI")
-                val jsonArray = JSONArray(jsonString)
+
+                val rawText = response.text ?: throw IllegalStateException("Tomt svar från AI-databasen")
+                val cleanedJson = rawText
+                    .trim()
+                    .removePrefix("```json")
+                    .removePrefix("```")
+                    .removeSuffix("```")
+                    .trim()
+
+                val jsonArray = when {
+                    cleanedJson.startsWith("{") -> {
+                        val rootObj = JSONObject(cleanedJson)
+                        rootObj.optJSONArray("items")
+                            ?: rootObj.optJSONArray("foods")
+                            ?: rootObj.optJSONArray("results")
+                            ?: throw IllegalStateException("AI-svaret saknade fältet 'items'")
+                    }
+                    cleanedJson.startsWith("[") -> JSONArray(cleanedJson)
+                    else -> {
+                        val startObj = cleanedJson.indexOf('{')
+                        val startArr = cleanedJson.indexOf('[')
+                        when {
+                            startObj >= 0 && (startArr < 0 || startObj < startArr) ->
+                                JSONObject(cleanedJson.substring(startObj)).optJSONArray("items")
+                                    ?: throw IllegalStateException("Kunde inte tolka JSON-svar")
+                            startArr >= 0 -> JSONArray(cleanedJson.substring(startArr))
+                            else -> throw IllegalStateException("Ogiltigt JSON-svar från AI-databasen")
+                        }
+                    }
+                }
+
                 val results = mutableListOf<SwedishFoodEntry>()
                 for (i in 0 until jsonArray.length()) {
-                    val obj = jsonArray.getJSONObject(i)
-                    val rawType = obj.optString("itemType", "GLOBAL_AI")
+                    val obj = jsonArray.optJSONObject(i) ?: continue
+                    val rawType = obj.optString("itemType", "GLOBAL_AI").uppercase()
                     val itemType = when (rawType) {
                         "SUPERMARKET" -> FoodEntryType.SUPERMARKET
                         "BRAND" -> FoodEntryType.BRAND
@@ -475,33 +538,42 @@ class AiNutritionService {
                         "DRINK" -> FoodEntryType.DRINK
                         else -> FoodEntryType.GLOBAL_AI
                     }
+                    val itemName = obj.optString("name", "").trim().ifBlank { cleanQuery }
                     results.add(
                         SwedishFoodEntry(
                             id = "ai_${UUID.randomUUID()}",
-                            name = obj.optString("name", query),
-                            brand = obj.optString("brand", "").takeIf { it.isNotBlank() },
-                            category = obj.optString("category", "Global databas"),
+                            name = itemName,
+                            brand = obj.optString("brand", "").trim().takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) },
+                            category = obj.optString("category", "Butik & Global databas").trim().ifBlank { "Butik & Global databas" },
                             itemType = itemType,
-                            caloriesPer100g = obj.optInt("caloriesPer100g", 120),
-                            proteinPer100g = obj.optDouble("proteinPer100g", 5.0),
-                            carbsPer100g = obj.optDouble("carbsPer100g", 15.0),
-                            fatPer100g = obj.optDouble("fatPer100g", 4.0),
-                            fiberPer100g = obj.optDouble("fiberPer100g", 1.0),
-                            sugarPer100g = obj.optDouble("sugarPer100g", 2.0),
-                            saltPer100g = obj.optDouble("saltPer100g", 0.5),
-                            standardPortionGrams = obj.optInt("standardPortionGrams", 200).coerceAtLeast(10),
-                            standardPortionDescription = obj.optString("standardPortionDescription", "1 normal portion"),
-                            densityGramsPerMl = obj.optDouble("densityGramsPerMl", 1.0)
+                            caloriesPer100g = obj.optInt("caloriesPer100g", 120).coerceIn(0, 1200),
+                            proteinPer100g = obj.optDouble("proteinPer100g", 0.0).coerceAtLeast(0.0),
+                            carbsPer100g = obj.optDouble("carbsPer100g", 0.0).coerceAtLeast(0.0),
+                            fatPer100g = obj.optDouble("fatPer100g", 0.0).coerceAtLeast(0.0),
+                            fiberPer100g = obj.optDouble("fiberPer100g", 0.0).coerceAtLeast(0.0),
+                            sugarPer100g = obj.optDouble("sugarPer100g", 0.0).coerceAtLeast(0.0),
+                            saltPer100g = obj.optDouble("saltPer100g", 0.0).coerceAtLeast(0.0),
+                            standardPortionGrams = obj.optInt("standardPortionGrams", 100).coerceIn(5, 2000),
+                            standardPortionDescription = obj.optString("standardPortionDescription", "1 normal portion").ifBlank { "1 normal portion" },
+                            densityGramsPerMl = obj.optDouble("densityGramsPerMl", 1.0).coerceIn(0.2, 2.0)
                         )
                     )
                 }
                 Result.success(results)
             }
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "[Food Search] Timeout vid sökning efter '$cleanQuery'", e)
+            Result.failure(Exception("AI-sökningen tog för lång tid (timeout). Kontrollera internetanslutningen och försök igen.", e))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Global food search via Gemini API fallback", e)
-            Result.success(getSmartSearchFallback(query))
+            Log.e(TAG, "[Food Search] Fel vid global AI-livsmedelssökning för '$cleanQuery': ${e.message}", e)
+            val userMessage = when {
+                isAppCheckError(e) -> "App Check-verifiering nekades (403). Kontrollera att App Check / debug-token är aktiv och försök igen."
+                isQuotaExceededError(e) -> "AI-kvoten är tillfälligt full. Vänta en stund och försök igen."
+                else -> "Kunde inte hämta från AI-livsmedelsdatabasen: ${e.localizedMessage ?: "Kontrollera internetanslutningen"}"
+            }
+            Result.failure(Exception(userMessage, e))
         }
     }
 

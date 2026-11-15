@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.roundToInt
 
@@ -35,6 +36,7 @@ object SwedishFoodDatabase {
     private var staticFoods: List<SwedishFoodEntry> = emptyList()
 
     private val dynamicFoodsList = CopyOnWriteArrayList<SwedishFoodEntry>()
+    private val aiFoodIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     private val moshi: Moshi by lazy {
         Moshi.Builder().build()
@@ -133,16 +135,38 @@ object SwedishFoodDatabase {
     /**
      * Dynamically caches foods discovered via AI Global Search or custom entries.
      */
-    fun addDynamicFood(food: SwedishFoodEntry) {
+    fun addDynamicFood(food: SwedishFoodEntry, fromAi: Boolean = false) {
+        if (fromAi || food.id.startsWith("ai_") || food.itemType == FoodEntryType.GLOBAL_AI) {
+            aiFoodIds.add(food.id)
+        }
         synchronized(dynamicFoodsList) {
-            if (staticFoods.none { it.id == food.id } && dynamicFoodsList.none { it.id == food.id }) {
+            val sameIdentityExists = dynamicFoodsList.any {
+                it.id == food.id ||
+                    (it.name.equals(food.name, ignoreCase = true) &&
+                        (it.brand ?: "").equals(food.brand ?: "", ignoreCase = true))
+            }
+            if (staticFoods.none { it.id == food.id } && !sameIdentityExists) {
                 dynamicFoodsList.add(0, food)
             }
         }
     }
 
-    fun addDynamicFoods(newFoods: List<SwedishFoodEntry>) {
-        newFoods.forEach { addDynamicFood(it) }
+    fun addDynamicFoods(newFoods: List<SwedishFoodEntry>, fromAi: Boolean = false) {
+        newFoods.asReversed().forEach { addDynamicFood(it, fromAi = fromAi) }
+    }
+
+    fun isAiFood(entry: SwedishFoodEntry): Boolean {
+        return entry.itemType == FoodEntryType.GLOBAL_AI ||
+            entry.id.startsWith("ai_") ||
+            aiFoodIds.contains(entry.id)
+    }
+
+    private fun normalizeSwedish(text: String): String {
+        return text.lowercase()
+            .replace('å', 'a')
+            .replace('ä', 'a')
+            .replace('ö', 'o')
+            .replace('é', 'e')
     }
 
     /**
@@ -156,21 +180,36 @@ object SwedishFoodDatabase {
 
     /**
      * Searches across all loaded static and dynamically added global foods matching query and filter.
+     * Supports multi-word queries across name, brand, and category, as well as Swedish diacritic fallback.
      */
     fun search(query: String, filterType: FoodEntryType? = null): List<SwedishFoodEntry> {
         val q = query.trim().lowercase()
+        val tokens = q.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val normTokens = tokens.map { normalizeSwedish(it) }
+
         return allFoods.filter { entry ->
-            val matchesType = filterType == null || entry.itemType == filterType
-            val matchesQuery = if (q.isBlank()) true else {
-                entry.name.lowercase().contains(q) ||
-                    (entry.brand != null && entry.brand.lowercase().contains(q)) ||
-                    entry.category.lowercase().contains(q)
+            val matchesType = when (filterType) {
+                null -> true
+                FoodEntryType.GLOBAL_AI -> isAiFood(entry)
+                else -> entry.itemType == filterType
+            }
+            val matchesQuery = if (q.isBlank()) {
+                true
+            } else {
+                val combined = "${entry.displayName} ${entry.name} ${entry.brand.orEmpty()} ${entry.category}".lowercase()
+                combined.contains(q) ||
+                    tokens.all { token -> combined.contains(token) } ||
+                    run {
+                        val normCombined = normalizeSwedish(combined)
+                        normTokens.all { normToken -> normCombined.contains(normToken) }
+                    }
             }
             matchesType && matchesQuery
         }.sortedWith(
             compareBy(
                 { if (q.isNotBlank() && it.name.lowercase().startsWith(q)) 0 else 1 },
                 { if (q.isNotBlank() && it.brand != null && it.brand.lowercase().startsWith(q)) 0 else 1 },
+                { if (isAiFood(it)) 0 else 1 },
                 { it.itemType.ordinal },
                 { it.name }
             )

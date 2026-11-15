@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,12 +62,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,12 +112,16 @@ fun FoodDiaryScreen(
     aiNutritionService: AiNutritionService? = null,
     learnedCorrections: List<AiFoodCorrection> = emptyList(),
     onCorrectionLearned: (AiFoodCorrection) -> Unit = {},
-    onDeleteLearnedRule: (String) -> Unit = {}
+    onDeleteLearnedRule: (String) -> Unit = {},
+    focusCategory: String? = null,
+    focusTrigger: Int = 0
 ) {
     var mealToDelete by remember { mutableStateOf<MealItem?>(null) }
     var mealToEdit by remember { mutableStateOf<MealItem?>(null) }
     var mealToCorrectWithAi by remember { mutableStateOf<MealItem?>(null) }
     var selectedCategoryForAdd by remember { mutableStateOf<String?>(null) }
+    var highlightedCategory by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
 
     val categories = listOf(
         Triple("frukost", "Frukost", Icons.Default.WbSunny to MacroCarbs),
@@ -123,6 +130,19 @@ fun FoodDiaryScreen(
         Triple("mellanmal", "Mellanmål", Icons.Default.BakeryDining to MacroFat),
         Triple("ovrigt", "Övrigt", Icons.Default.Restaurant to EmeraldDark)
     )
+
+    LaunchedEffect(focusTrigger, focusCategory) {
+        if (focusTrigger > 0 && !focusCategory.isNullOrBlank()) {
+            val catIndex = categories.indexOfFirst { it.first == focusCategory }
+            if (catIndex >= 0) {
+                // Items 0 and 1 are Date Switcher and Daily Total Summary Card
+                listState.animateScrollToItem(2 + catIndex)
+                highlightedCategory = focusCategory
+                delay(1800L)
+                highlightedCategory = null
+            }
+        }
+    }
 
     val totalDayCalories = meals.sumOf { it.calories }
     val totalDayProtein = meals.sumOf { it.protein }
@@ -138,6 +158,7 @@ fun FoodDiaryScreen(
         }
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -244,7 +265,7 @@ fun FoodDiaryScreen(
                 val categoryMeals = meals.filter { it.mealType == catKey }
                 val catCalories = categoryMeals.sumOf { it.calories }
 
-                item {
+                item(key = "cat_$catKey") {
                     MealCategoryDiarySection(
                         title = catTitle,
                         categoryKey = catKey,
@@ -252,6 +273,7 @@ fun FoodDiaryScreen(
                         accentColor = iconAndAccent.second,
                         calories = catCalories,
                         meals = categoryMeals,
+                        isHighlighted = highlightedCategory == catKey,
                         onAddClicked = { selectedCategoryForAdd = catKey },
                         onEditMeal = { mealToEdit = it },
                         onCorrectWithAi = if (aiNutritionService != null) {
@@ -788,6 +810,7 @@ private fun MealCategoryDiarySection(
     accentColor: Color,
     calories: Int,
     meals: List<MealItem>,
+    isHighlighted: Boolean = false,
     onAddClicked: () -> Unit,
     onEditMeal: (MealItem) -> Unit,
     onCorrectWithAi: ((MealItem) -> Unit)? = null,
@@ -797,8 +820,17 @@ private fun MealCategoryDiarySection(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+        colors = CardDefaults.cardColors(
+            containerColor = if (isHighlighted) {
+                EmeraldPrimary.copy(alpha = 0.08f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        border = BorderStroke(
+            width = if (isHighlighted) 2.dp else 1.dp,
+            color = if (isHighlighted) EmeraldPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(

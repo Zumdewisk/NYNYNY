@@ -12,16 +12,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -127,6 +132,10 @@ fun ManualFoodEntryScreen(
     var searchVersion by remember { mutableIntStateOf(0) }
     var isAiSearching by remember { mutableStateOf(false) }
     var aiSearchMessage by remember { mutableStateOf<String?>(null) }
+    var aiSearchIsError by remember { mutableStateOf(false) }
+    var latestAiResults by remember { mutableStateOf<Pair<String, List<SwedishFoodEntry>>?>(null) }
+    var lastAutoSearchedQuery by remember { mutableStateOf("") }
+    val searchFocusRequester = remember { FocusRequester() }
 
     // Custom food state
     var customName by remember { mutableStateOf("") }
@@ -136,43 +145,70 @@ fun ManualFoodEntryScreen(
     var customCarbs by remember { mutableStateOf("") }
     var customFat by remember { mutableStateOf("") }
 
-    // Filtered food items (reacts to searchQuery, selectedTypeFilter, and dynamic updates)
-    val searchResults = remember(searchQuery, selectedTypeFilter, searchVersion) {
-        SwedishFoodDatabase.search(searchQuery, selectedTypeFilter)
+    // Filtered food items (reacts to searchQuery, selectedTypeFilter, and dynamic AI updates)
+    val searchResults = remember(searchQuery, selectedTypeFilter, searchVersion, latestAiResults) {
+        val localAndDynamicHits = SwedishFoodDatabase.search(searchQuery, selectedTypeFilter)
+        val cleanQ = searchQuery.trim()
+        val pinnedAi = latestAiResults
+            ?.takeIf { it.first.equals(cleanQ, ignoreCase = true) && cleanQ.isNotEmpty() }
+            ?.second
+            .orEmpty()
+            .filter { aiEntry ->
+                when (selectedTypeFilter) {
+                    null, FoodEntryType.GLOBAL_AI -> true
+                    else -> aiEntry.itemType == selectedTypeFilter
+                }
+            }
+        if (pinnedAi.isEmpty()) {
+            localAndDynamicHits
+        } else {
+            val pinnedIds = pinnedAi.map { it.id }.toHashSet()
+            pinnedAi + localAndDynamicHits.filterNot { pinnedIds.contains(it.id) }
+        }
     }
 
     val performGlobalAiSearch: (String) -> Unit = { query ->
         val cleanQuery = query.trim()
-        if (cleanQuery.isNotEmpty() && !isAiSearching) {
+        if (cleanQuery.isEmpty()) {
+            aiSearchIsError = false
+            aiSearchMessage = "Skriv namnet på en vara, butiksprodukt eller maträtt i sökfältet ovan."
+            try {
+                searchFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        } else if (!isAiSearching) {
             isAiSearching = true
-            aiSearchMessage = "Söker i livsmedelsdatabasen efter \"$cleanQuery\"..."
+            aiSearchIsError = false
+            aiSearchMessage = "Söker i AI-livsmedelsdatabasen efter \"$cleanQuery\"..."
+            lastAutoSearchedQuery = cleanQuery.lowercase()
             coroutineScope.launch {
                 try {
                     val service = aiNutritionService
-                    if (service != null) {
+                    if (service == null) {
+                        aiSearchIsError = true
+                        aiSearchMessage = "AI-tjänsten är inte tillgänglig just nu."
+                    } else {
                         val result = service.searchGlobalFoodDatabase(cleanQuery)
                         result.onSuccess { items ->
                             if (items.isNotEmpty()) {
-                                SwedishFoodDatabase.addDynamicFoods(items)
+                                SwedishFoodDatabase.addDynamicFoods(items, fromAi = true)
+                                latestAiResults = cleanQuery to items
                                 searchVersion++
-                                aiSearchMessage = "Hittade och lade till ${items.size} varor i databasen!"
+                                aiSearchIsError = false
+                                aiSearchMessage = "Hittade och lade till ${items.size} varor för \"$cleanQuery\"!"
                             } else {
-                                aiSearchMessage = "Inga resultat hittades för \"$cleanQuery\"."
+                                aiSearchIsError = true
+                                aiSearchMessage = "Inga AI-träffar hittades för \"$cleanQuery\". Prova ett annat sökord."
                             }
-                        }.onFailure { _ ->
-                            val fallback = AiNutritionService.getSmartSearchFallback(cleanQuery)
-                            SwedishFoodDatabase.addDynamicFoods(fallback)
-                            searchVersion++
-                            aiSearchMessage = "Lade till ${fallback.size} förslag i databasen."
+                        }.onFailure { err ->
+                            aiSearchIsError = true
+                            aiSearchMessage = err.localizedMessage ?: "Kunde inte nå AI-livsmedelsdatabasen. Försök igen."
                         }
-                    } else {
-                        val fallback = AiNutritionService.getSmartSearchFallback(cleanQuery)
-                        SwedishFoodDatabase.addDynamicFoods(fallback)
-                        searchVersion++
-                        aiSearchMessage = "Lade till ${fallback.size} förslag i databasen."
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    aiSearchMessage = "Kunde inte genomföra sökningen: ${e.message}"
+                    aiSearchIsError = true
+                    aiSearchMessage = "Kunde inte genomföra sökningen: ${e.localizedMessage ?: "Okänt fel"}"
                 } finally {
                     isAiSearching = false
                 }
@@ -180,11 +216,11 @@ fun ManualFoodEntryScreen(
         }
     }
 
-    // Auto-search: when user types (e.g. 'jordnötssmör' or any product) and pauses, auto-query global database if local hits are few
+    // Auto-search: when user types >= 3 chars and pauses, auto-query global database if local hits are few
     androidx.compose.runtime.LaunchedEffect(searchQuery) {
         val q = searchQuery.trim()
-        if (q.length >= 3) {
-            kotlinx.coroutines.delay(650)
+        if (q.length >= 3 && !q.equals(lastAutoSearchedQuery, ignoreCase = true)) {
+            kotlinx.coroutines.delay(750)
             val currentLocalHits = SwedishFoodDatabase.search(q, selectedTypeFilter)
             if (currentLocalHits.size <= 2 && !isAiSearching) {
                 performGlobalAiSearch(q)
@@ -205,337 +241,363 @@ fun ManualFoodEntryScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+                .imePadding(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Meal Category FilterChips (Frukost, Lunch, Middag, Mellanmål)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    "frukost" to "Frukost",
-                    "lunch" to "Lunch",
-                    "middag" to "Middag",
-                    "mellanmal" to "Mellanmål"
-                ).forEach { (catKey, label) ->
-                    FilterChip(
-                        selected = selectedMealType == catKey,
-                        onClick = { selectedMealType = catKey },
-                        label = { Text(label, fontSize = 12.sp, maxLines = 1, softWrap = false) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = EmeraldPrimary,
-                            selectedLabelColor = Color.Black
+            // Meal Category FilterChips (Frukost, Lunch, Middag, Mellanmål, Övrigt)
+            item(key = "meal_category_chips") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "frukost" to "Frukost",
+                        "lunch" to "Lunch",
+                        "middag" to "Middag",
+                        "mellanmal" to "Mellanmål",
+                        "ovrigt" to "Övrigt"
+                    ).forEach { (catKey, label) ->
+                        FilterChip(
+                            selected = selectedMealType == catKey,
+                            onClick = { selectedMealType = catKey },
+                            label = { Text(label, fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = EmeraldPrimary,
+                                selectedLabelColor = Color.Black
+                            )
                         )
-                    )
+                    }
                 }
             }
 
             // Tabs: Sök i databas vs Eget livsmedel
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.background,
-                contentColor = EmeraldPrimary,
-                modifier = Modifier.padding(vertical = 8.dp)
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Sök mat och varumärken", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false) }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Eget livsmedel", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false) }
-                )
+            item(key = "entry_mode_tabs") {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentColor = EmeraldPrimary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Sök mat och varumärken", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Eget livsmedel", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false) }
+                    )
+                }
             }
 
             if (selectedTab == 0) {
                 // Search Input Field with IME Search action
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = {
-                        searchQuery = it
-                        aiSearchMessage = null
-                    },
-                    placeholder = { Text("Sök vara, maträtt eller varumärke...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isAiSearching) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color(0xFF8B5CF6)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                            }
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    searchQuery = ""
-                                    aiSearchMessage = null
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Rensa")
+                item(key = "search_input_field") {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = {
+                            searchQuery = it
+                            aiSearchMessage = null
+                            aiSearchIsError = false
+                        },
+                        placeholder = { Text("Sök vara, maträtt eller varumärke...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isAiSearching) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color(0xFF8B5CF6)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        searchQuery = ""
+                                        aiSearchMessage = null
+                                        aiSearchIsError = false
+                                        latestAiResults = null
+                                        lastAutoSearchedQuery = ""
+                                    }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Rensa")
+                                    }
                                 }
                             }
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Search
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onSearch = { performGlobalAiSearch(searchQuery) }
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .testTag("food_search_input"),
-                    shape = RoundedCornerShape(14.dp),
-                    singleLine = true
-                )
-
-                // Sub-filter chips (FlowRow / wrap)
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedTypeFilter == null,
-                        onClick = { selectedTypeFilter = null },
-                        label = { Text("Alla", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = EmeraldPrimary.copy(alpha = 0.2f),
-                            selectedLabelColor = EmeraldDark
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.SUPERMARKET,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.SUPERMARKET) null else FoodEntryType.SUPERMARKET },
-                        label = { Text("🛒 Matbutik", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF0284C7).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFF0284C7)
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.MEAL,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.MEAL) null else FoodEntryType.MEAL },
-                        label = { Text("🍲 Måltider", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF059669).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFF059669)
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.BRAND,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.BRAND) null else FoodEntryType.BRAND },
-                        label = { Text("🏷️ Varumärken", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF2563EB).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFF2563EB)
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.FASTFOOD,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.FASTFOOD) null else FoodEntryType.FASTFOOD },
-                        label = { Text("🍔 Snabbmat", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFFDC2626).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFFDC2626)
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.BASIC,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.BASIC) null else FoodEntryType.BASIC },
-                        label = { Text("🥦 Basvaror", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFFD97706).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFFD97706)
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.DRINK,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.DRINK) null else FoodEntryType.DRINK },
-                        label = { Text("🥤 Drycker", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF06B6D4).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFF0891B2)
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedTypeFilter == FoodEntryType.GLOBAL_AI,
-                        onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.GLOBAL_AI) null else FoodEntryType.GLOBAL_AI },
-                        label = { Text("✨ AI-sök", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF8B5CF6).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFF8B5CF6)
-                        )
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Search
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onSearch = { performGlobalAiSearch(searchQuery) }
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(searchFocusRequester)
+                            .testTag("food_search_input"),
+                        shape = RoundedCornerShape(14.dp),
+                        singleLine = true
                     )
                 }
 
-                // AI Global Search Banner (Lifesum & Store Mode)
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clickable(enabled = !isAiSearching && searchQuery.isNotBlank()) {
-                            performGlobalAiSearch(searchQuery)
-                        }
-                        .testTag("global_ai_search_banner"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF8B5CF6).copy(alpha = 0.12f)),
-                    border = BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.4f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Sub-filter chips (FlowRow / wrap)
+                item(key = "type_filter_chips") {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF8B5CF6).copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
+                        FilterChip(
+                            selected = selectedTypeFilter == null,
+                            onClick = { selectedTypeFilter = null },
+                            label = { Text("Alla", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = EmeraldPrimary.copy(alpha = 0.2f),
+                                selectedLabelColor = EmeraldDark
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.SUPERMARKET,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.SUPERMARKET) null else FoodEntryType.SUPERMARKET },
+                            label = { Text("🛒 Matbutik", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF0284C7).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFF0284C7)
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.MEAL,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.MEAL) null else FoodEntryType.MEAL },
+                            label = { Text("🍲 Måltider", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF059669).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFF059669)
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.BRAND,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.BRAND) null else FoodEntryType.BRAND },
+                            label = { Text("🏷️ Varumärken", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF2563EB).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFF2563EB)
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.FASTFOOD,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.FASTFOOD) null else FoodEntryType.FASTFOOD },
+                            label = { Text("🍔 Snabbmat", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFDC2626).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFFDC2626)
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.BASIC,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.BASIC) null else FoodEntryType.BASIC },
+                            label = { Text("🥦 Basvaror", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFD97706).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFFD97706)
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.DRINK,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.DRINK) null else FoodEntryType.DRINK },
+                            label = { Text("🥤 Drycker", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF06B6D4).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFF0891B2)
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == FoodEntryType.GLOBAL_AI,
+                            onClick = { selectedTypeFilter = if (selectedTypeFilter == FoodEntryType.GLOBAL_AI) null else FoodEntryType.GLOBAL_AI },
+                            label = { Text("✨ AI-sök", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF8B5CF6).copy(alpha = 0.2f),
+                                selectedLabelColor = Color(0xFF8B5CF6)
+                            )
+                        )
+                    }
+                }
+
+                // AI Global Search Banner (Butik och Globalt)
+                item(key = "global_ai_search_banner") {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isAiSearching) {
+                                performGlobalAiSearch(searchQuery)
+                            }
+                            .testTag("global_ai_search_banner"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF8B5CF6).copy(alpha = 0.12f)),
+                        border = BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            if (isAiSearching) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color(0xFF8B5CF6)
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF8B5CF6).copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isAiSearching) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color(0xFF8B5CF6)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = Color(0xFF8B5CF6),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isAiSearching) "Söker i AI-livsmedelsdatabasen..." else "AI-livsmedelsdatabas (butik och globalt)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = Color(0xFF8B5CF6),
-                                    modifier = Modifier.size(18.dp)
+                                Text(
+                                    text = if (searchQuery.isNotBlank()) {
+                                        "Hämta träffar för \"${searchQuery.trim()}\" från svenska butiker och världen"
+                                    } else {
+                                        "Skriv en vara ovan och sök bland varor från svenska butiker och världen"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isAiSearching) "Söker i livsmedelsdatabasen..." else "AI-livsmedelsdatabas (butik och globalt)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (searchQuery.isNotBlank()) {
-                                    "Hämta träffar för \"$searchQuery\" från svenska butiker och världen"
-                                } else {
-                                    "Sök bland varor, rätter och varumärken från svenska butiker och världen"
-                                },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        if (!isAiSearching && searchQuery.isNotBlank()) {
-                            Button(
-                                onClick = { performGlobalAiSearch(searchQuery) },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Text("Sök AI", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                            if (!isAiSearching && searchQuery.isNotBlank()) {
+                                Button(
+                                    onClick = { performGlobalAiSearch(searchQuery) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Sök AI", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                }
                             }
                         }
                     }
                 }
 
                 if (aiSearchMessage != null) {
-                    Text(
-                        text = aiSearchMessage!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF059669),
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
+                    item(key = "ai_search_status") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = aiSearchMessage!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (aiSearchIsError) MaterialTheme.colorScheme.error else Color(0xFF059669),
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (aiSearchIsError && searchQuery.isNotBlank() && !isAiSearching) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = { performGlobalAiSearch(searchQuery) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Försök igen", fontSize = 11.sp, maxLines = 1, softWrap = false)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Results counter
-                Text(
-                    text = "${searchResults.size} träffar (tryck för att välja portion eller mängd):",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
+                item(key = "results_counter") {
+                    Text(
+                        text = "${searchResults.size} träffar (tryck för att välja portion eller mängd):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 // Results list or Empty State
                 if (searchResults.isEmpty()) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    ) {
-                        Column(
+                    item(key = "empty_search_state") {
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                .padding(vertical = 8.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                         ) {
-                            Text(
-                                text = if (searchQuery.isNotBlank()) "Hittade inte '$searchQuery' lokalt" else "Inga livsmedel hittades",
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center,
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                text = "Vår globala AI-databas täcker all mat i hela världen – inklusive svenska och internationella restauranger, märken och rätter.",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            if (searchQuery.isNotBlank()) {
-                                Button(
-                                    onClick = { performGlobalAiSearch(searchQuery) },
-                                    enabled = !isAiSearching,
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
-                                    modifier = Modifier.testTag("ai_search_empty_state_button")
-                                ) {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Sök '$searchQuery' i globala databasen")
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = if (searchQuery.isNotBlank()) "Hittade inte '${searchQuery.trim()}' lokalt" else "Inga livsmedel hittades",
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Vår globala AI-databas täcker all mat i hela världen – inklusive svenska och internationella restauranger, märken och butiksvaror.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                if (searchQuery.isNotBlank()) {
+                                    Button(
+                                        onClick = { performGlobalAiSearch(searchQuery) },
+                                        enabled = !isAiSearching,
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                        modifier = Modifier.testTag("ai_search_empty_state_button")
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Sök '${searchQuery.trim()}' i globala databasen")
+                                    }
                                 }
                             }
                         }
                     }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(searchResults, key = { it.id }) { food ->
-                            FoodResultCard(
-                                food = food,
-                                onClick = { foodForPortionConfig = food }
-                            )
-                        }
-
-                        item {
-                            Spacer(modifier = Modifier.height(30.dp))
-                        }
+                    items(searchResults, key = { it.id }) { food ->
+                        FoodResultCard(
+                            food = food,
+                            onClick = { foodForPortionConfig = food }
+                        )
                     }
                 }
             } else {
-                // Custom food tab
-                CustomFoodEntryForm(
+                // Custom food tab (inside the same unified LazyColumn for full-page scrolling)
+                customFoodEntryItems(
                     currentDate = currentDate,
                     selectedMealType = selectedMealType,
                     customName = customName,
@@ -560,6 +622,10 @@ fun ManualFoodEntryScreen(
                         onSaveMeal(meal)
                     }
                 )
+            }
+
+            item(key = "bottom_spacer") {
+                Spacer(modifier = Modifier.height(28.dp))
             }
         }
     }
@@ -861,7 +927,8 @@ private fun PortionQuantityConfigSheet(
                     "frukost" to "Frukost",
                     "lunch" to "Lunch",
                     "middag" to "Middag",
-                    "mellanmal" to "Mellanmål"
+                    "mellanmal" to "Mellanmål",
+                    "ovrigt" to "Övrigt"
                 ).forEach { (catKey, label) ->
                     FilterChip(
                         selected = activeMealType == catKey,
@@ -1312,10 +1379,9 @@ private fun MacroStatItem(
 }
 
 /**
- * Form for manually entering custom foods
+ * Form items for manually entering custom foods inside the unified LazyColumn
  */
-@Composable
-private fun CustomFoodEntryForm(
+private fun LazyListScope.customFoodEntryItems(
     currentDate: String,
     selectedMealType: String,
     customName: String,
@@ -1332,131 +1398,126 @@ private fun CustomFoodEntryForm(
     onCustomFatChange: (String) -> Unit,
     onSaveMeal: (MealItem) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
+    item(key = "custom_food_name") {
+        OutlinedTextField(
+            value = customName,
+            onValueChange = onCustomNameChange,
+            label = { Text("Maträtt / Livsmedelsnamn") },
+            placeholder = { Text("T.ex. Hemlagad fiskgratäng") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true
+        )
+    }
+
+    item(key = "custom_food_brand") {
+        OutlinedTextField(
+            value = customBrand,
+            onValueChange = onCustomBrandChange,
+            label = { Text("Varumärke / Tillverkare (valfritt)") },
+            placeholder = { Text("T.ex. Hemlagat, Felix, ICA") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true
+        )
+    }
+
+    item(key = "custom_food_kcal") {
+        OutlinedTextField(
+            value = customKcal,
+            onValueChange = onCustomKcalChange,
+            label = { Text("Kalorier (kcal)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true
+        )
+    }
+
+    item(key = "custom_food_macros") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             OutlinedTextField(
-                value = customName,
-                onValueChange = onCustomNameChange,
-                label = { Text("Maträtt / Livsmedelsnamn") },
-                placeholder = { Text("T.ex. Hemlagad fiskgratäng") },
-                modifier = Modifier.fillMaxWidth(),
+                value = customProtein,
+                onValueChange = onCustomProteinChange,
+                label = { Text("Protein (g)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = customCarbs,
+                onValueChange = onCustomCarbsChange,
+                label = { Text("Kolhydrater (g)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = customFat,
+                onValueChange = onCustomFatChange,
+                label = { Text("Fett (g)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
         }
+    }
 
-        item {
-            OutlinedTextField(
-                value = customBrand,
-                onValueChange = onCustomBrandChange,
-                label = { Text("Varumärke / Tillverkare (valfritt)") },
-                placeholder = { Text("T.ex. Hemlagat, Felix, ICA") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
-        }
+    item(key = "custom_food_save_button") {
+        Spacer(modifier = Modifier.height(8.dp))
 
-        item {
-            OutlinedTextField(
-                value = customKcal,
-                onValueChange = onCustomKcalChange,
-                label = { Text("Kalorier (kcal)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
-        }
+        Button(
+            onClick = {
+                if (customName.isNotBlank()) {
+                    val kcal = customKcal.toIntOrNull() ?: 0
+                    val p = customProtein.replace(',', '.').toDoubleOrNull() ?: 0.0
+                    val c = customCarbs.replace(',', '.').toDoubleOrNull() ?: 0.0
+                    val f = customFat.replace(',', '.').toDoubleOrNull() ?: 0.0
 
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = customProtein,
-                    onValueChange = onCustomProteinChange,
-                    label = { Text("Protein (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = customCarbs,
-                    onValueChange = onCustomCarbsChange,
-                    label = { Text("Kolhydrater (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = customFat,
-                    onValueChange = onCustomFatChange,
-                    label = { Text("Fett (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-            }
-        }
+                    val fullName = if (customBrand.isNotBlank()) "$customBrand $customName" else customName
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
+                    val ingredient = FoodIngredient(
+                        name = fullName,
+                        amountGrams = 100,
+                        calories = kcal,
+                        protein = p,
+                        carbs = c,
+                        fat = f
+                    )
 
-            Button(
-                onClick = {
-                    if (customName.isNotBlank()) {
-                        val kcal = customKcal.toIntOrNull() ?: 0
-                        val p = customProtein.replace(',', '.').toDoubleOrNull() ?: 0.0
-                        val c = customCarbs.replace(',', '.').toDoubleOrNull() ?: 0.0
-                        val f = customFat.replace(',', '.').toDoubleOrNull() ?: 0.0
-
-                        val fullName = if (customBrand.isNotBlank()) "$customBrand $customName" else customName
-
-                        val ingredient = FoodIngredient(
-                            name = fullName,
-                            amountGrams = 100,
-                            calories = kcal,
-                            protein = p,
-                            carbs = c,
-                            fat = f
-                        )
-
-                        val meal = MealItem(
-                            date = currentDate,
-                            mealType = selectedMealType,
-                            name = fullName,
-                            calories = kcal,
-                            protein = p,
-                            carbs = c,
-                            fat = f,
-                            itemsJson = FoodIngredient.serializeList(listOf(ingredient)),
-                            aiAnalyzed = false
-                        )
-                        onSaveMeal(meal)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(26.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = EmeraldPrimary,
-                    contentColor = Color.Black
-                ),
-                enabled = customName.isNotBlank() && customKcal.isNotBlank()
-            ) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Spara i matdagboken", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            }
+                    val meal = MealItem(
+                        date = currentDate,
+                        mealType = selectedMealType,
+                        name = fullName,
+                        calories = kcal,
+                        protein = p,
+                        carbs = c,
+                        fat = f,
+                        itemsJson = FoodIngredient.serializeList(listOf(ingredient)),
+                        aiAnalyzed = false
+                    )
+                    onSaveMeal(meal)
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(26.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = EmeraldPrimary,
+                contentColor = Color.Black
+            ),
+            enabled = customName.isNotBlank() && customKcal.isNotBlank()
+        ) {
+            Icon(Icons.Default.Check, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Spara i matdagboken", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }
