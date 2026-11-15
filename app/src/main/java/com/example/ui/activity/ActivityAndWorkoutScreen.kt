@@ -494,7 +494,7 @@ fun ActivityAndWorkoutScreen(
 
                             healthConnectAvailability == HealthConnectAvailability.AVAILABLE -> {
                                 Text(
-                                    text = "Ge NäringAI tillstånd att läsa dina steg, aktiva kalorier och träningspass så justeras ditt dagliga kalorimål automatiskt.",
+                                    text = "Ge Zevra tillstånd att läsa dina steg, aktiva kalorier och träningspass så justeras ditt dagliga kalorimål automatiskt.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

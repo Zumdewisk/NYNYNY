@@ -318,7 +318,7 @@ fun AiDiagnosticsDialog(
                         onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val report = buildString {
-                                appendLine("=== NÄRINGAI AI-DIAGNOSTIKRAPPORT ===")
+                                appendLine("=== ZEVRA AI-DIAGNOSTIKRAPPORT ===")
                                 appendLine("App Check: ${appCheckDiag?.diagnosis}")
                                 appendLine("Standard Token: ${appCheckDiag?.standardTokenDetails}")
                                 appendLine("Limited Use Token: ${appCheckDiag?.limitedUseTokenDetails}")

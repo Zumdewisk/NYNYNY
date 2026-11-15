@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build-apk:
-    name: Bygg NäringAI APK
+    name: Bygg Zevra APK
     runs-on: ubuntu-latest
 
     steps:
@@ -183,7 +183,7 @@ jobs:
       - name: Förbered APK-fil för nedladdning
         run: |
           mkdir -p release-apks
-          cp app/build/outputs/apk/debug/app-debug.apk release-apks/NaringAI.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-apks/Zevra.apk
 
       - name: Kontrollera om release-keystore finns
         id: check_release
@@ -210,12 +210,12 @@ jobs:
           echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > "$KEYSTORE_PATH"
           gradle assembleRelease --no-daemon --no-configuration-cache --stacktrace --max-workers=2 \
             -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
-          cp app/build/outputs/apk/release/app-release.apk release-apks/NaringAI-release.apk
+          cp app/build/outputs/apk/release/app-release.apk release-apks/Zevra-release.apk
 
       - name: Ladda upp APK som Workflow Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: NaringAI-APK
+          name: Zevra-APK
           path: release-apks/*.apk
           retention-days: 90
 
@@ -231,12 +231,12 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: latest
-          name: NäringAI – Senaste APK
+          name: Zevra – Senaste APK
           body: |
-            Automatiskt byggd Android-APK för **NäringAI** från `${{ github.ref_name }}` (`${{ github.sha }}`).
+            Automatiskt byggd Android-APK för **Zevra** från `${{ github.ref_name }}` (`${{ github.sha }}`).
 
             ### Så laddar du ner och installerar på Android
-            1. Tryck på **`NaringAI.apk`** under **Assets** nedan för att ladda ner appen.
+            1. Tryck på **`Zevra.apk`** under **Assets** nedan för att ladda ner appen.
             2. Öppna den nedladdade filen på din Android-telefon och tillåt installation från okända källor om systemet frågar.
           files: release-apks/*.apk
           make_latest: true

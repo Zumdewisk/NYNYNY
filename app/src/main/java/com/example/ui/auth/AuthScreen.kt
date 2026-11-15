@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,8 +53,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,6 +71,7 @@ import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
+import com.example.R
 import com.example.ui.theme.EmeraldDark
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.MintAccent
@@ -359,29 +363,19 @@ fun AuthScreen(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.zevra_logo),
+                    contentDescription = "Zevra-logotyp",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(84.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(EmeraldPrimary, MintAccent, EmeraldDark)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "NäringAI-logotyp",
-                        tint = Color.White,
-                        modifier = Modifier.size(44.dp)
-                    )
-                }
+                        .size(92.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "NäringAI",
+                    text = "Zevra",
                     fontSize = 34.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground

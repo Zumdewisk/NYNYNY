@@ -155,7 +155,7 @@ class AiNutritionService {
             systemInstruction = content {
                 text(
                     """
-                    Du är NäringAI:s personliga AI-dietist och kostrådgivare.
+                    Du är Zevras personliga AI-dietist och kostrådgivare.
                     Ditt mål är att hjälpa användaren nå sina mål med vetenskapligt underbyggda, empatiska och konkreta råd på svenska.
                     Du känner till användarens profil (mål, kalorier, makron) och dagens registrerade måltider som tillhandahålls i kontexten.
                     Svara kortfattat, hjälpsamt och motiverande. Använd alltid svenska mått (g, ml, kcal).
@@ -271,7 +271,7 @@ class AiNutritionService {
     }
 
     private val mealPlanSystemPrompt = """
-        Du är en legitimerad svensk dietist och kostrådgivare i appen NäringAI.
+        Du är en legitimerad svensk dietist och kostrådgivare i appen Zevra.
         Skapa kompletta, praktiska och goda svenska dagsscheman baserade på användarens kalorimål, antal måltider och kostpreferenser.
 
         REGLER:
@@ -341,7 +341,7 @@ class AiNutritionService {
     }
 
     private val mealCorrectionSystemPrompt = """
-        Du är NäringAI:s adaptiva kliniska dietist och bildigenkännings-AI.
+        Du är Zevras adaptiva kliniska dietist och bildigenkännings-AI.
         Användaren har fått en AI-analys av en måltid men berättar att något blev fel (t.ex. fel livsmedel, fel tillagning, dolda såser/fetter eller fel gramvikt).
 
         UPPGIFT:
@@ -555,7 +555,7 @@ class AiNutritionService {
                 val connection = url.openConnection() as java.net.HttpURLConnection
                 connection.connectTimeout = 4000
                 connection.readTimeout = 4000
-                connection.setRequestProperty("User-Agent", "NaringAi - Android - Version 1.0")
+                connection.setRequestProperty("User-Agent", "Zevra - Android - Version 1.0")
                 if (connection.responseCode == 200) {
                     val stream = connection.inputStream.bufferedReader()
                     val text = stream.use { it.readText() }

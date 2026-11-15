@@ -81,13 +81,13 @@ class PermissionsRationaleActivity : ComponentActivity() {
                         }
 
                         Text(
-                            text = "Hur NäringAI använder Health Connect",
+                            text = "Hur Zevra använder Health Connect",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.ExtraBold
                         )
 
                         Text(
-                            text = "NäringAI läser endast den aktivitetsdata du godkänner för att automatiskt anpassa ditt dagliga kalorimål och ge en komplett bild av din träning.",
+                            text = "Zevra läser endast den aktivitetsdata du godkänner för att automatiskt anpassa ditt dagliga kalorimål och ge en komplett bild av din träning.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -107,7 +107,7 @@ class PermissionsRationaleActivity : ComponentActivity() {
                         RationaleItem(
                             icon = Icons.AutoMirrored.Filled.DirectionsRun,
                             title = "Träningspass",
-                            description = "Läser dina pass från träningsappar/klockor och låter dig valfritt spara manuella pass från NäringAI."
+                            description = "Läser dina pass från träningsappar/klockor och låter dig valfritt spara manuella pass från Zevra."
                         )
 
                         Text(

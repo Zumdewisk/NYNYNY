@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "NäringAI"
+rootProject.name = "Zevra"
 
 include(":app")

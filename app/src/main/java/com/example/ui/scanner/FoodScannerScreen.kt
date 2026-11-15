@@ -1659,7 +1659,7 @@ private fun CameraFallbackScreen(
 
         Text(
             text = if (!hasPermission) {
-                "För att NäringAI ska kunna fotografera din mat och identifiera ingredienser och kalorier direkt på skärmen behövs tillgång till kameran."
+                "För att Zevra ska kunna fotografera din mat och identifiera ingredienser och kalorier direkt på skärmen behövs tillgång till kameran."
             } else {
                 "Kameran kunde inte startas automatiskt. Tryck på \"Starta kameran igen\" eller välj en bild från galleriet eller en exempelmåltid."
             },

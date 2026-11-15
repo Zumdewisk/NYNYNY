@@ -53,12 +53,15 @@ import com.example.ui.theme.EmeraldPrimary
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import com.example.data.repository.AiNutritionService
 
@@ -274,7 +277,7 @@ fun AppRoot(
                 }
 
                 Text(
-                    text = "NäringAI",
+                    text = "Zevra",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -360,23 +363,17 @@ fun AppRoot(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.zevra_logo),
+                    contentDescription = "Zevra-logotyp",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(68.dp)
-                        .clip(CircleShape)
-                        .background(EmeraldPrimary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = EmeraldPrimary,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                )
 
                 Text(
-                    text = "NäringAI",
+                    text = "Zevra",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground

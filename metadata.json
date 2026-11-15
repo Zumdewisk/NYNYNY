@@ -1,5 +1,5 @@
 {
-  "name": "NäringAI",
+  "name": "Zevra",
   "description": "AI-baserad kost- och näringsapp med bildanalys, matdagbok och personliga mål.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
