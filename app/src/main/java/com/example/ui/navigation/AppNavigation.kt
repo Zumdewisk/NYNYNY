@@ -67,7 +67,6 @@ import com.example.health.HealthConnectManager
 import com.example.ui.activity.ActivityAndWorkoutScreen
 import com.example.ui.assistant.AiAssistantScreen
 import com.example.ui.auth.signOutUser
-import com.example.ui.components.StartIoBannerAd
 import com.example.ui.dashboard.DashboardScreen
 import com.example.ui.diary.FoodDiaryScreen
 import com.example.ui.profile.ProfileScreen
@@ -290,7 +289,6 @@ fun AppNavigation(
             val isMainTab = currentScreen in listOf(Screen.Dashboard, Screen.Diary, Screen.Stats, Screen.Profile)
             if (isMainTab) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    StartIoBannerAd(modifier = Modifier.fillMaxWidth())
                     androidx.compose.material3.HorizontalDivider(
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
