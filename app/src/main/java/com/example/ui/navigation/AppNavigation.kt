@@ -5,12 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -67,6 +70,7 @@ import com.example.health.HealthConnectManager
 import com.example.ui.activity.ActivityAndWorkoutScreen
 import com.example.ui.assistant.AiAssistantScreen
 import com.example.ui.auth.signOutUser
+import com.example.ui.components.WebBannerAd
 import com.example.ui.dashboard.DashboardScreen
 import com.example.ui.diary.FoodDiaryScreen
 import com.example.ui.profile.ProfileScreen
@@ -282,23 +286,34 @@ fun AppNavigation(
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            // Show bottom navigation on main tabs
-            val isMainTab = currentScreen in listOf(Screen.Dashboard, Screen.Diary, Screen.Stats, Screen.Profile)
-            if (isMainTab) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    androidx.compose.material3.HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-                    )
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        tonalElevation = 0.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .padding(bottom = 51.dp),
+            contentWindowInsets = WindowInsets.statusBars,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                // Show bottom navigation on main tabs
+                val isMainTab = currentScreen in listOf(Screen.Dashboard, Screen.Diary, Screen.Stats, Screen.Profile)
+                if (isMainTab) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                        )
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 0.dp,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                         // 1. Hem
                         NavigationBarItem(
                             selected = currentScreen == Screen.Dashboard,
@@ -847,6 +862,23 @@ fun AppNavigation(
                     )
                 }
             }
+        }
+    }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .navigationBarsPadding()
+        ) {
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+            )
+            WebBannerAd(
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
