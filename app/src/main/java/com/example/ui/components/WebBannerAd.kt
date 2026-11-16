@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
-private const val DEFAULT_BANNER_URL = "https://zumdewisk.github.io/NYNYNY/banner.html"
+private const val DEFAULT_BANNER_URL = "https://zumdewisk.github.io/banner.html"
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
