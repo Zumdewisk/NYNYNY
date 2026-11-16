@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings // <-- 1. NY IMPORT HÄR
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +41,8 @@ fun WebBannerAd(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW // <-- 2. NY RAD HÄR
+                    userAgentString = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36" // <-- 3. VALFRI MEN REKOMMENDERAD (gör att Monetag tror det är vanlig Chrome)
                     loadWithOverviewMode = true
                     useWideViewPort = true
                 }
