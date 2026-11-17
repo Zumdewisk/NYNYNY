@@ -24,7 +24,9 @@ object SwedishFoodDatabase {
         "mejeri_agg_frukost.json",
         "skafferi_snacks_saser.json",
         "baslivsmedel.json",
-        "matbutik.json"
+        "matbutik.json",
+        "internationella_varor.json",
+        "kompletterande_livsmedel.json"
     )
 
     private val initLock = Any()

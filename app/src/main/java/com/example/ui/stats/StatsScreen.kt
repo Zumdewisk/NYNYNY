@@ -1,5 +1,8 @@
 package com.example.ui.stats
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -22,13 +25,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -40,6 +47,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,12 +58,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MealItem
 import com.example.data.model.UserProfile
+import com.example.report.WeeklyReportScheduler
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.MacroCarbs
 import com.example.ui.theme.MacroFat
@@ -85,6 +96,13 @@ fun StatsScreen(
 ) {
     var selectedTimeframe by remember { mutableIntStateOf(0) } // 0 = 7 dagar, 1 = 30 dagar
     var selectedBarIndex by remember { mutableStateOf<Int?>(null) }
+    val context = LocalContext.current
+    var weeklyReportsEnabled by remember {
+        mutableStateOf(WeeklyReportScheduler.isEnabled(context))
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     val daysCount = if (selectedTimeframe == 0) 7 else 30
     val targetCalories = userProfile?.targetCalories ?: 2200
@@ -196,6 +214,108 @@ fun StatsScreen(
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+            }
+
+            // Automatic weekly report
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Automatisk veckorapport",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "Påminnelse varje vecka med ny sammanfattning",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = weeklyReportsEnabled,
+                                onCheckedChange = { enabled ->
+                                    weeklyReportsEnabled = enabled
+                                    if (enabled) {
+                                        WeeklyReportScheduler.enable(context)
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                    } else {
+                                        WeeklyReportScheduler.disable(context)
+                                    }
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val weekReport = buildString {
+                            appendLine("Veckorapport")
+                            appendLine(
+                                "${daySummaries.first().displayLabel} - ${daySummaries.last().displayLabel}"
+                            )
+                            appendLine("Snittintag: $avgCalories kcal/dag")
+                            appendLine("Snitt protein: $avgProtein g/dag")
+                            appendLine("Snitt kolhydrater: $avgCarbs g/dag")
+                            appendLine("Snitt fett: $avgFat g/dag")
+                            appendLine("Mål: $targetCalories kcal/dag")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "Min veckorapport")
+                                    putExtra(Intent.EXTRA_TEXT, weekReport)
+                                }
+                                context.startActivity(
+                                    Intent.createChooser(shareIntent, "Dela veckorapport")
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Dela veckorapport")
+                        }
                     }
                 }
             }

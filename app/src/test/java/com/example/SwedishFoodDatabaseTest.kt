@@ -44,7 +44,15 @@ class SwedishFoodDatabaseTest {
 
         val allStatic = SwedishFoodDatabase.foods
         assertEquals("Inga dubbla ID:n får förekomma i matdatabasen", rawEntries.size, allStatic.size)
-        assertTrue("Databasen ska ha minst 370 livsmedel och drycker, hade ${allStatic.size}", allStatic.size >= 370)
+        assertTrue("Databasen ska ha minst 700 livsmedel och drycker, hade ${allStatic.size}", allStatic.size >= 700)
+        val catalogEntries = allStatic.count {
+            it.id.startsWith("basic_catalog_") || it.id.startsWith("meal_catalog_")
+        }
+        assertTrue("Den kompletterande katalogen ska innehålla råvaror och måltider", catalogEntries >= 150)
+        assertTrue(
+            "Den internationella katalogen ska innehålla minst 90 varor",
+            allStatic.count { it.id.startsWith("basic_world_") || it.id.startsWith("meal_world_") } >= 90
+        )
 
         val nonNullBarcodes = allStatic.mapNotNull { it.barcode }
         assertEquals("Inga dubbla streckkoder får förekomma", nonNullBarcodes.size, nonNullBarcodes.distinct().size)
@@ -89,6 +97,13 @@ class SwedishFoodDatabaseTest {
         assertTrue(SwedishFoodDatabase.search("kanelbulle").isNotEmpty())
         assertTrue(SwedishFoodDatabase.search("mandlar").isNotEmpty())
         assertTrue(SwedishFoodDatabase.search("whopper").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("quinoa").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("tofu").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("pad thai").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("sushi").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("pak choi").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("baklava").isNotEmpty())
+        assertTrue(SwedishFoodDatabase.search("onigiri").isNotEmpty())
 
         // Drinks coverage & DRINK type filtering
         val allDrinks = SwedishFoodDatabase.search("", FoodEntryType.DRINK)
