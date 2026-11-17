@@ -131,7 +131,7 @@ class AiNutritionService {
 
     private val visionModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = "gemini-2.0-flash",
             generationConfig = visionConfig,
             systemInstruction = content {
                 text(clinicalNutritionistSystemPrompt)
@@ -142,7 +142,7 @@ class AiNutritionService {
     // Secondary vision model with separate quota pool (allows unlimited failover when primary model reaches daily quota)
     private val visionModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash-8b",
+            modelName = "gemini-2.0-flash-lite",
             generationConfig = visionConfig,
             systemInstruction = content {
                 text(clinicalNutritionistSystemPrompt)
@@ -152,7 +152,7 @@ class AiNutritionService {
 
     private val chatModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = "gemini-2.0-flash",
             systemInstruction = content {
                 text(
                     """
@@ -217,7 +217,7 @@ class AiNutritionService {
 
     private val foodSearchModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = "gemini-2.0-flash",
             generationConfig = foodSearchGenerationConfig,
             systemInstruction = content {
                 text(foodSearchSystemPrompt)
@@ -227,7 +227,7 @@ class AiNutritionService {
 
     private val foodSearchModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash-8b",
+            modelName = "gemini-2.0-flash-lite",
             generationConfig = foodSearchGenerationConfig,
             systemInstruction = content {
                 text(foodSearchSystemPrompt)
@@ -307,7 +307,7 @@ class AiNutritionService {
 
     private val mealPlanModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = "gemini-2.0-flash",
             generationConfig = mealPlanConfig,
             systemInstruction = content {
                 text(mealPlanSystemPrompt)
@@ -317,7 +317,7 @@ class AiNutritionService {
 
     private val mealPlanModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash-8b",
+            modelName = "gemini-2.0-flash-lite",
             generationConfig = mealPlanConfig,
             systemInstruction = content {
                 text(mealPlanSystemPrompt)
@@ -374,7 +374,7 @@ class AiNutritionService {
 
     private val correctionModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = "gemini-2.0-flash",
             generationConfig = mealCorrectionConfig,
             systemInstruction = content {
                 text(mealCorrectionSystemPrompt)
@@ -384,7 +384,7 @@ class AiNutritionService {
 
     private val correctionModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-1.5-flash-8b",
+            modelName = "gemini-2.0-flash-lite",
             generationConfig = mealCorrectionConfig,
             systemInstruction = content {
                 text(mealCorrectionSystemPrompt)
