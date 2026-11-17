@@ -73,6 +73,7 @@ android {
         it.systemProperty("robolectric.dependency.dir", "/home/appuser/.m2/repository")
       }
     }
+
   }
   dependenciesInfo {
     includeInApk = false
@@ -92,6 +93,10 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
+dependencies {
+  // Start.io SDK för Android
+  implementation("com.startapp:inapp-sdk:4.11.0") // Kontrollera gärna efter nyare version hos Start.io
+}
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))

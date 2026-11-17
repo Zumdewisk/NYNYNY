@@ -182,8 +182,8 @@ class MainActivity : ComponentActivity() {
         // Mandatory App Check configuration with launch intent before any UI or Firebase calls
         firebaseInitState = initializeFirebaseAndAppCheck(this, intent)
 
-        // Initiera Start.io SDK med Zevras App ID
-        StartAppSDK.init(this, "210102802", false)
+        // Initiera Start.io SDK med ditt App ID
+        StartAppSDK.init(this, "210690701", true)
 
         enableEdgeToEdge()
 
