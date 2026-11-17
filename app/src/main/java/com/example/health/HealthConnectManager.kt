@@ -63,6 +63,7 @@ data class DailyActivityEnergySummary(
     val adjustedCalorieGoal: Int
 )
 
+@androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
 class HealthConnectManager(private val context: Context) {
 
     private val appContext = context.applicationContext
@@ -164,6 +165,7 @@ class HealthConnectManager(private val context: Context) {
         }
     }
 
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
     suspend fun fetchDailyData(date: LocalDate): HealthConnectDailyData {
         val dateStr = date.toString()
         val client = getClientOrNull()

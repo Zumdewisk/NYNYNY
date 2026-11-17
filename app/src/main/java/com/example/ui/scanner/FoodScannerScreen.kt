@@ -194,7 +194,6 @@ fun FoodScannerScreen(
 
     // Scanner Mode: 0 = AI Matkamera (Plate / Image), 1 = Streckkodsläsare (Barcode / EAN)
     var scanMode by remember { mutableIntStateOf(0) }
-    var isScanningBarcode by remember { mutableStateOf(false) }
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     var scannedFoodEntry by remember { mutableStateOf<SwedishFoodEntry?>(null) }
     var lastScannedTimestamp by remember { mutableStateOf(0L) }

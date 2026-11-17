@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.core.content.edit
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -114,25 +115,17 @@ fun initializeFirebaseAndAppCheck(context: Context, intent: Intent?): FirebaseIn
 
             val intentDebugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)?.trim()
             if (!intentDebugToken.isNullOrEmpty()) {
-                prefs.edit()
-                    .putString(DEBUG_SECRET_KEY, intentDebugToken)
-                    .commit()
-                backupPrefs.edit()
-                    .putString(BACKUP_DEBUG_TOKEN_KEY, intentDebugToken)
-                    .commit()
+                prefs.edit { putString(DEBUG_SECRET_KEY, intentDebugToken) }
+                backupPrefs.edit { putString(BACKUP_DEBUG_TOKEN_KEY, intentDebugToken) }
                 Log.d(TAG, "App Check debug secret configured from Intent extra.")
             } else {
                 val existingStored = prefs.getString(DEBUG_SECRET_KEY, null)?.trim()
                 val backedUpToken = backupPrefs.getString(BACKUP_DEBUG_TOKEN_KEY, null)?.trim()
                 if (existingStored.isNullOrEmpty() && !backedUpToken.isNullOrEmpty()) {
-                    prefs.edit()
-                        .putString(DEBUG_SECRET_KEY, backedUpToken)
-                        .commit()
+                    prefs.edit { putString(DEBUG_SECRET_KEY, backedUpToken) }
                     Log.d(TAG, "App Check debug secret restored from backup.")
                 } else if (!existingStored.isNullOrEmpty() && backedUpToken.isNullOrEmpty()) {
-                    backupPrefs.edit()
-                        .putString(BACKUP_DEBUG_TOKEN_KEY, existingStored)
-                        .commit()
+                    backupPrefs.edit { putString(BACKUP_DEBUG_TOKEN_KEY, existingStored) }
                 } else {
                     Log.d(TAG, "Using stored App Check debug secret.")
                 }
@@ -165,10 +158,6 @@ fun initializeFirebaseAndAppCheck(context: Context, intent: Intent?): FirebaseIn
         Log.e(TAG, "Failed to initialize Firebase App Check", e)
         FirebaseInitState.Error(e.localizedMessage ?: "Okänt fel vid initiering av Firebase.")
     }
-}
-
-fun configureAppCheck(context: Context, intent: Intent?): Boolean {
-    return initializeFirebaseAndAppCheck(context, intent) == FirebaseInitState.Ready
 }
 
 class MainActivity : ComponentActivity() {

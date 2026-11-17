@@ -28,7 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -395,7 +395,7 @@ fun ActivityAndWorkoutScreen(
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(
-                                                    imageVector = Icons.Default.DirectionsWalk,
+                                                    imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
                                                     contentDescription = null,
                                                     tint = MacroWater,
                                                     modifier = Modifier.size(16.dp)
@@ -1069,7 +1069,7 @@ private fun workoutIcon(type: WorkoutType): ImageVector {
     return when (type) {
         WorkoutType.STRENGTH -> Icons.Default.FitnessCenter
         WorkoutType.RUNNING -> Icons.AutoMirrored.Filled.DirectionsRun
-        WorkoutType.WALKING -> Icons.Default.DirectionsWalk
+        WorkoutType.WALKING -> Icons.AutoMirrored.Filled.DirectionsWalk
         WorkoutType.CYCLING -> Icons.AutoMirrored.Filled.DirectionsBike
         WorkoutType.HIIT -> Icons.Default.Bolt
         WorkoutType.SWIMMING -> Icons.Default.Pool

@@ -14,7 +14,7 @@ android {
 
   defaultConfig {
     applicationId = "com.aistudio.naringai.kzpxvm"
-    minSdk = 24
+    minSdk = 26
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
@@ -56,6 +56,7 @@ android {
     }
   }
   compileOptions {
+    isCoreLibraryDesugaringEnabled = true
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
     encoding = "UTF-8"
@@ -94,8 +95,9 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
+  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
   // Start.io SDK för Android
-  implementation("com.startapp:inapp-sdk:4.11.0") // Kontrollera gärna efter nyare version hos Start.io
+  implementation("com.startapp:inapp-sdk:5.5.0") // Kontrollera gärna efter nyare version hos Start.io
 }
 dependencies {
   implementation(platform(libs.androidx.compose.bom))

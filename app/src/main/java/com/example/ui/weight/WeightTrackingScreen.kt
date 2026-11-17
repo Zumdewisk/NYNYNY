@@ -28,10 +28,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MonitorWeight
-import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingFlat
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -251,9 +251,9 @@ fun WeightTrackingScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val trendIcon = when {
-                                        weightChange < -0.1 -> Icons.Default.TrendingDown
-                                        weightChange > 0.1 -> Icons.Default.TrendingUp
-                                        else -> Icons.Default.TrendingFlat
+                                        weightChange < -0.1 -> Icons.AutoMirrored.Filled.TrendingDown
+                                        weightChange > 0.1 -> Icons.AutoMirrored.Filled.TrendingUp
+                                        else -> Icons.AutoMirrored.Filled.TrendingFlat
                                     }
                                     val trendColor = when {
                                         weightChange < -0.1 -> MaterialTheme.colorScheme.primary
@@ -354,7 +354,7 @@ fun WeightTrackingScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.ShowChart,
+                                    imageVector = Icons.AutoMirrored.Filled.ShowChart,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)

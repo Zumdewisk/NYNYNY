@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.BakeryDining
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DinnerDining
-import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -444,7 +444,7 @@ fun DashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (stepsCount > 0L) Icons.Default.DirectionsWalk else Icons.Default.FitnessCenter,
+                                    imageVector = if (stepsCount > 0L) Icons.AutoMirrored.Filled.DirectionsWalk else Icons.Default.FitnessCenter,
                                     contentDescription = null,
                                     tint = if (hasHealthConnectPermission) MacroWater else MacroCarbs,
                                     modifier = Modifier.size(22.dp)

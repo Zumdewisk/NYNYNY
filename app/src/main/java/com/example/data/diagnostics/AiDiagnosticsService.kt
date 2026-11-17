@@ -210,7 +210,7 @@ class AiDiagnosticsService(
                 imageBytes = 0,
                 imageConfig = "NONE",
                 inlineBytesVerified = false,
-                modelName = "gemini-3.8-flash",
+                modelName = "gemini-1.5-flash",
                 rawResponse = null,
                 parsedMealName = null,
                 parsedCalories = null,
@@ -273,7 +273,7 @@ class AiDiagnosticsService(
                 imageBytes = byteCount,
                 imageConfig = configStr,
                 inlineBytesVerified = inlineVerified,
-                modelName = "gemini-3.8-flash",
+                modelName = "gemini-1.5-flash",
                 rawResponse = analysis.reasoning,
                 parsedMealName = analysis.mealName,
                 parsedCalories = analysis.totalCalories,
@@ -310,7 +310,7 @@ class AiDiagnosticsService(
                 imageBytes = byteCount,
                 imageConfig = configStr,
                 inlineBytesVerified = inlineVerified,
-                modelName = "gemini-3.8-flash",
+                modelName = "gemini-1.5-flash",
                 rawResponse = null,
                 parsedMealName = null,
                 parsedCalories = null,
@@ -336,7 +336,7 @@ class AiDiagnosticsService(
             val prefs = context.getSharedPreferences("$DEBUG_STORE_PREFIX$persistenceKey", Context.MODE_PRIVATE)
             val backupPrefs = context.getSharedPreferences("naringai_appcheck_backup", Context.MODE_PRIVATE)
             val success = prefs.edit().putString(DEBUG_SECRET_KEY, cleanToken).commit()
-            backupPrefs.edit().putString("saved_debug_token", cleanToken).commit()
+            backupPrefs.edit().putString("saved_debug_token", cleanToken).apply()
             if (success) {
                 val appCheck = FirebaseAppCheck.getInstance()
                 appCheck.setTokenAutoRefreshEnabled(true)

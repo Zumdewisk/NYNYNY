@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.edit
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -316,10 +317,9 @@ fun signOutUser(
     onSignOutComplete: () -> Unit,
     scope: CoroutineScope
 ) {
-    context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-        .edit()
-        .putBoolean("was_signed_in", false)
-        .apply()
+    context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE).edit {
+        putBoolean("was_signed_in", false)
+    }
     scope.launch {
         withContext(NonCancellable) {
             try {
