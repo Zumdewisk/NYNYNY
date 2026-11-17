@@ -151,10 +151,10 @@ jobs:
           print("Verifierat: debug.keystore SHA-1 och Web OAuth-klient matchar app/google-services.json.")
           PY
 
-      - name: Konfigurera Gradle 9.3.1
+      - name: Konfigurera Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "9.3.1"
+          gradle-version: "9.6.0"
 
       - name: Bygg signerad APK
         env:
