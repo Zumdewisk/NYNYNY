@@ -357,16 +357,36 @@ fun FoodScannerScreen(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
-                    val safeBmp = bitmap?.let { safelyDownsampleBitmap(it, 800) }
-                    withContext(Dispatchers.Main) {
-                        if (safeBmp != null) {
-                            startImageProcessing(safeBmp)
-                        } else {
-                            errorMessage = "Kunde inte läsa vald bild från galleriet."
-                        }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    val boundsStream = context.contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("Kunde inte öppna vald bild.")
+                    boundsStream.use {
+                        BitmapFactory.decodeStream(it, null, bounds)
                     }
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        throw IllegalStateException("Den valda filen är inte en giltig bild.")
+                    }
+
+                    val maxDimension = 800
+                    var sampleSize = 1
+                    while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > maxDimension) {
+                        sampleSize *= 2
+                    }
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize
+                        inPreferredConfig = Bitmap.Config.RGB_565
+                    }
+                    val imageStream = context.contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("Kunde inte öppna vald bild.")
+                    val bitmap = imageStream.use {
+                        BitmapFactory.decodeStream(it, null, options)
+                    } ?: throw IllegalStateException("Kunde inte avkoda vald bild.")
+                    val safeBmp = safelyDownsampleBitmap(bitmap, maxDimension)
+                    withContext(Dispatchers.Main) {
+                        startImageProcessing(safeBmp)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (t: Throwable) {
                     Log.e(TAG, "Failed to load image from gallery", t)
                     withContext(Dispatchers.Main) {

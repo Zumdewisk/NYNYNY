@@ -131,7 +131,7 @@ class AiNutritionService {
 
     private val visionModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash",
+            modelName = "gemini-3.8-flash",
             generationConfig = visionConfig,
             systemInstruction = content {
                 text(clinicalNutritionistSystemPrompt)
@@ -142,7 +142,7 @@ class AiNutritionService {
     // Secondary vision model with separate quota pool (allows unlimited failover when primary model reaches daily quota)
     private val visionModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash-lite",
+            modelName = "gemini-3.5-flash-lite",
             generationConfig = visionConfig,
             systemInstruction = content {
                 text(clinicalNutritionistSystemPrompt)
@@ -152,7 +152,7 @@ class AiNutritionService {
 
     private val chatModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash",
+            modelName = "gemini-3.8-flash",
             systemInstruction = content {
                 text(
                     """
@@ -217,7 +217,7 @@ class AiNutritionService {
 
     private val foodSearchModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash",
+            modelName = "gemini-3.8-flash",
             generationConfig = foodSearchGenerationConfig,
             systemInstruction = content {
                 text(foodSearchSystemPrompt)
@@ -227,7 +227,7 @@ class AiNutritionService {
 
     private val foodSearchModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash-lite",
+            modelName = "gemini-3.5-flash-lite",
             generationConfig = foodSearchGenerationConfig,
             systemInstruction = content {
                 text(foodSearchSystemPrompt)
@@ -307,7 +307,7 @@ class AiNutritionService {
 
     private val mealPlanModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash",
+            modelName = "gemini-3.8-flash",
             generationConfig = mealPlanConfig,
             systemInstruction = content {
                 text(mealPlanSystemPrompt)
@@ -317,7 +317,7 @@ class AiNutritionService {
 
     private val mealPlanModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash-lite",
+            modelName = "gemini-3.5-flash-lite",
             generationConfig = mealPlanConfig,
             systemInstruction = content {
                 text(mealPlanSystemPrompt)
@@ -374,7 +374,7 @@ class AiNutritionService {
 
     private val correctionModel by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash",
+            modelName = "gemini-3.8-flash",
             generationConfig = mealCorrectionConfig,
             systemInstruction = content {
                 text(mealCorrectionSystemPrompt)
@@ -384,7 +384,7 @@ class AiNutritionService {
 
     private val correctionModelLite by lazy {
         firebaseAi.generativeModel(
-            modelName = "gemini-2.0-flash-lite",
+            modelName = "gemini-3.5-flash-lite",
             generationConfig = mealCorrectionConfig,
             systemInstruction = content {
                 text(mealCorrectionSystemPrompt)
@@ -487,7 +487,7 @@ class AiNutritionService {
                     }
                 } catch (primaryErr: Exception) {
                     if (isQuotaExceededError(primaryErr)) {
-                        Log.w(TAG, "[Food Search] Primär modell nådde kvotgräns, växlar till gemini-1.5-flash-8b", primaryErr)
+                        Log.w(TAG, "[Food Search] Primär modell nådde kvotgräns, växlar till gemini-3.5-flash-lite", primaryErr)
                         executeWithAppCheckRetry {
                             foodSearchModelLite.generateContent(content { text(prompt) })
                         }
@@ -990,7 +990,7 @@ class AiNutritionService {
                     text(promptText)
                 }
 
-                Log.d(TAG, "[Gemini Vision] 🚀 3. Skickar API-anrop till Gemini AI (primär modell: gemini-1.5-flash)...")
+                Log.d(TAG, "[Gemini Vision] 🚀 3. Skickar API-anrop till Gemini AI (primär modell: gemini-3.8-flash)...")
                 val response = try {
                     executeWithAppCheckRetry {
                         visionModel.generateContent(promptContent)
@@ -998,7 +998,7 @@ class AiNutritionService {
                 } catch (e: Exception) {
                     val isQuota = isQuotaExceededError(e)
                     if (isQuota) {
-                        Log.w(TAG, "[Gemini Vision] ⚠️ Primär modell kvotgräns nådd (429/RESOURCE_EXHAUSTED). Växlar automatiskt till sekundär modell gemini-1.5-flash-8b...", e)
+                        Log.w(TAG, "[Gemini Vision] ⚠️ Primär modell kvotgräns nådd (429/RESOURCE_EXHAUSTED). Växlar automatiskt till sekundär modell gemini-3.5-flash-lite...", e)
                         try {
                             executeWithAppCheckRetry {
                                 visionModelLite.generateContent(promptContent)
@@ -1282,17 +1282,20 @@ class AiNutritionService {
                     items = items
                 )
             }
-            // General cooked meal plate (chicken/meat, potato/rice, vegetables)
+            // Avoid inventing a meal when the local visual fallback cannot classify the image.
             else -> {
-                val items = listOf(
-                    SwedishFoodDatabase.calculateNutritionForFood("Kycklingfilé stekt", 150, 0.86),
-                    SwedishFoodDatabase.calculateNutritionForFood("Kokt ris", 160, 0.85),
-                    SwedishFoodDatabase.calculateNutritionForFood("Broccoli kokt", 80, 0.88)
-                )
-                buildMealFromIngredients(
-                    name = "Kycklingfilé med ris och broccoli",
-                    reasoning = "Visuell bildigenkänning identifierade en välbalanserad varmrätt med magert protein, komplexa kolhydrater och grönsaker.",
-                    items = items
+                AiMealAnalysisResult(
+                    mealName = "Ingen mat identifierades",
+                    confidence = "low",
+                    reasoning = "Den lokala bildanalysen kunde inte identifiera måltiden säkert, så ingen näringsinformation har lagts till. Försök igen med en tydligare bild.",
+                    totalCalories = 0,
+                    totalProteinG = 0.0,
+                    totalCarbsG = 0.0,
+                    totalFatG = 0.0,
+                    totalFiberG = 0.0,
+                    totalSugarG = 0.0,
+                    totalSaltG = 0.0,
+                    items = emptyList()
                 )
             }
         }
@@ -1536,7 +1539,7 @@ class AiNutritionService {
 
     /**
      * Generates a complete Swedish daily meal plan via Gemini with forced JSON schema.
-     * Transparently retries App Check errors and falls back to gemini-1.5-flash-8b on quota (429).
+     * Transparently retries App Check errors and falls back to gemini-3.5-flash-lite on quota (429).
      */
     suspend fun generateDailyMealPlan(
         dailyCalories: Int,
@@ -1575,7 +1578,7 @@ class AiNutritionService {
                     }
                 } catch (e: Exception) {
                     if (isQuotaExceededError(e)) {
-                        Log.w(TAG, "[MealPlan AI] Primär modell nådde kvotgräns, växlar till gemini-1.5-flash-8b", e)
+                        Log.w(TAG, "[MealPlan AI] Primär modell nådde kvotgräns, växlar till gemini-3.5-flash-lite", e)
                         executeWithAppCheckRetry {
                             mealPlanModelLite.generateContent(promptContent)
                         }
@@ -1660,7 +1663,7 @@ class AiNutritionService {
                     }
                 } catch (e: Exception) {
                     if (isQuotaExceededError(e)) {
-                        Log.w(TAG, "[MealCorrection AI] Primär modell kvotgräns nådd, växlar till gemini-1.5-flash-8b", e)
+                        Log.w(TAG, "[MealCorrection AI] Primär modell kvotgräns nådd, växlar till gemini-3.5-flash-lite", e)
                         executeWithAppCheckRetry {
                             correctionModelLite.generateContent(promptContent)
                         }

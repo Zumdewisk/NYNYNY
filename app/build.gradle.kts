@@ -69,10 +69,6 @@ android {
   testOptions {
     unitTests {
       isIncludeAndroidResources = true
-      all {
-        it.systemProperty("robolectric.offline", "true")
-        it.systemProperty("robolectric.dependency.dir", "/home/appuser/.m2/repository")
-      }
     }
 
   }
@@ -171,4 +167,3 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     freeCompilerArgs.add("-Xjsr305=strict")
   }
 }
-
