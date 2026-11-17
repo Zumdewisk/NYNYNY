@@ -184,7 +184,6 @@ class MainActivity : ComponentActivity() {
 
         // Initiera Start.io SDK med ditt App ID
         StartAppSDK.init(this, "210690701", true)
-        StartAppSDK.setTestAdsEnabled(true)
 
         enableEdgeToEdge()
 
