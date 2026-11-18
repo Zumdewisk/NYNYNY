@@ -22,14 +22,13 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Sync
 import com.example.data.model.AiFoodCorrection
 import com.example.data.repository.AiNutritionService
-// AiDiagnosticsDialog behålls i projektet men är dold i gränssnittet tills vidare
-// import androidx.compose.material.icons.filled.BugReport
-// import com.example.ui.diagnostics.AiDiagnosticsDialog
+import com.example.ui.diagnostics.AiDiagnosticsDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
@@ -87,6 +86,7 @@ fun ProfileScreen(
 ) {
     val authUser = Firebase.auth.currentUser
     var showAiMemoryDialog by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
 
     var ageText by remember(currentProfile) { mutableStateOf((currentProfile?.age ?: 28).toString()) }
     var heightText by remember(currentProfile) { mutableStateOf((currentProfile?.heightCm ?: 178).toString()) }
@@ -535,11 +535,71 @@ fun ProfileScreen(
                 }
             }
 
-            /* AI- och App Check-diagnostik är dold från användargränssnittet men sparad i koden (AiDiagnosticsDialog / AiDiagnosticsService)
+            // AI- och App Check-diagnostik
             item {
-                Card( ... )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_ai_diagnostics_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BugReport,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "AI- & App Check-diagnostik",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Testa Gemini-anslutning och debug-tokens",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        OutlinedButton(
+                            onClick = { showDiagnosticsDialog = true },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .height(48.dp)
+                                .testTag("profile_ai_diagnostics_button")
+                        ) {
+                            Text("Diagnostik", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
             }
-            */
 
             // Sign Out Button
             item {
@@ -569,12 +629,13 @@ fun ProfileScreen(
             }
         }
 
-        /* Diagnostikdialog dold tills vidare
         if (showDiagnosticsDialog) {
             val effectiveService = aiNutritionService ?: remember { AiNutritionService() }
-            AiDiagnosticsDialog(...)
+            AiDiagnosticsDialog(
+                onDismiss = { showDiagnosticsDialog = false },
+                aiNutritionService = effectiveService
+            )
         }
-        */
 
         if (showAiMemoryDialog) {
             AlertDialog(

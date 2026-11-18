@@ -97,7 +97,15 @@ fun AppNavigation(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val repository = remember(currentUserId) { NutritionRepository(context) }
-    val effectiveAiNutritionService = aiNutritionService ?: remember { AiNutritionService() }
+    val effectiveAiNutritionService = aiNutritionService ?: remember {
+        AiNutritionService().apply {
+            initializeFoodClassifier(context.applicationContext)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        effectiveAiNutritionService.initializeFoodClassifier(context.applicationContext)
+    }
 
     // Date state
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }

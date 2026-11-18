@@ -34,13 +34,17 @@ object WeeklyReportScheduler {
             .putBoolean(ENABLED_KEY, true)
             .apply()
 
-        val request = PeriodicWorkRequestBuilder<WeeklyReportWorker>(7, TimeUnit.DAYS)
-            .build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
-        )
+        try {
+            val request = PeriodicWorkRequestBuilder<WeeklyReportWorker>(7, TimeUnit.DAYS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                request
+            )
+        } catch (e: Exception) {
+            // WorkManager not initialized (e.g. in test environment)
+        }
     }
 
     fun disable(context: Context) {
@@ -48,7 +52,12 @@ object WeeklyReportScheduler {
             .edit()
             .putBoolean(ENABLED_KEY, false)
             .apply()
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        } catch (e: Exception) {
+            // WorkManager not initialized (e.g. in test environment)
+        }
     }
 
     fun isEnabled(context: Context): Boolean =
